@@ -1,12 +1,12 @@
-![](https://staticdelivery.nexusmods.com/mods/3667/images/1828/1828-1648532354-466380845.png)
+![](https://staticdelivery.nexusmods.com/mods/3667/images/2505/2505-1693921543-26561571.png)
 
-# Map Printer
+# Nomap Printer
 In nomap mode reading the Cartography Table will generate a simplified map and save it to player save file to be shown by pressing usual map key.
 This mod was designed to enhance nomap playthroughs for players to look at their current exploration progress without the spoiler of live updates.
 This mod could be handy if you want some map reference for your travels but don't want to draw map yourself in paint or w/e.
 
 ## Main features:
-* generates static map based on algorithms of ![MapPrinter](https://valheim.thunderstore.io/package/ASpy/MapPrinter/) mod by ASpy (all credits to him)
+* generates static map based on algorithms of [MapPrinter](https://valheim.thunderstore.io/package/ASpy/MapPrinter/) mod by ASpy (all credits to him)
 * shows that map at ingame window, only in nomap mode (map updates only on table interaction)
 * map is saved between session at savefile
 * option to save generated map to file
@@ -30,7 +30,7 @@ This mod could be handy if you want some map reference for your travels but don'
 * pins that checked (red crossed) are not shown
 * Bed and death pins are not shown
 
-To place pins immersively in nomap mode you can use ![AutoPinSigns](https://valheim.thunderstore.io/package/shudnal/AutoPinSigns/)
+To place pins immersively in nomap mode you can use [AutoPinSigns](https://valheim.thunderstore.io/package/shudnal/AutoPinSigns/)
 
 ## Compatibility:
 * This mod interacts with very little of the game code, conflicts with other mods are pretty unlikely
