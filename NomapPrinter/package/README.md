@@ -30,7 +30,9 @@ This mod could be handy if you want some map reference for your travels but don'
 * pins that checked (red crossed) are not shown
 * Bed and death pins are not shown
 
+## Best mods to use with
 To place pins immersively in nomap mode you can use [AutoPinSigns](https://valheim.thunderstore.io/package/shudnal/AutoPinSigns/)
+To see pins without map you can use [Compass](https://www.nexusmods.com/valheim/mods/851)
 
 ## Compatibility:
 * This mod interacts with very little of the game code, conflicts with other mods are pretty unlikely
