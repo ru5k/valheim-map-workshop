@@ -10,7 +10,7 @@ This mod could be handy if you want some map reference for your travels but don'
 * shows that map at ingame window, only in nomap mode (map updates only on table interaction)
 * map is saved between session at savefile
 * option to save generated map to file
-* map generated in 4096x4096 resolution with option to generate 8192x8192 (better visuals, more space on savefile)
+* map generated in 4096x4096 resolution with option to generate 8192x8192 (better visuals, more size on savefile)
 * 4 different styles of map with topographical lines
 * configurable pins on map
 * pins config is server synced
@@ -36,6 +36,9 @@ To place pins immersively in nomap mode you can use [AutoPinSigns](https://valhe
 * This mod interacts with very little of the game code, conflicts with other mods are pretty unlikely
 * Gamepad isn't supported for ingame map window
 * I didn't test map saving between sessions with ServerCharacters mod
+
+## Mirrors
+[Nexus](https://www.nexusmods.com/valheim/mods/2505)
 
 ## Changelog
 
