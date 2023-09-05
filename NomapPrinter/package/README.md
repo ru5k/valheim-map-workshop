@@ -39,5 +39,5 @@ To place pins immersively in nomap mode you can use [AutoPinSigns](https://valhe
 
 ## Changelog
 
-v 1.0.0
+v 1.0.2
  * Initial release
