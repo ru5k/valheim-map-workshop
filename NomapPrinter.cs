@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.0.3";
+        const string pluginVersion = "1.0.4";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -924,7 +924,7 @@ namespace NomapPrinter
                                 continue;
                     }
 
-                    if (IsShowablePinIcon(pin))
+                    if (IsShowablePinIcon(pin) && !pinsToPrint.ContainsKey(pin.m_pos))
                         pinsToPrint.Add(pin.m_pos, pin.m_icon.name);
                 }
             }
