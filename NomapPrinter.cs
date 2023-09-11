@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.0.2";
+        const string pluginVersion = "1.0.3";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -28,6 +28,7 @@ namespace NomapPrinter
         private static ConfigEntry<bool> modEnabled;
         private static ConfigEntry<bool> configLocked;
         private static ConfigEntry<bool> doubleTheSize;
+        private static ConfigEntry<float> showInRadius; 
 
         private static ConfigEntry<bool> loggingEnabled;
 
@@ -269,6 +270,23 @@ namespace NomapPrinter
             set
             {
                 if (_displayingWindow == value) return;
+
+                if (value && showInRadius.Value > 0)
+                {
+                    List<Piece> pieces = new List<Piece>(); ;
+                    Piece.GetAllPiecesInRadius(Player.m_localPlayer.transform.position, showInRadius.Value, pieces);
+                    foreach (Piece piece in pieces)
+                    {
+                        value = piece.TryGetComponent<MapTable>(out MapTable table);
+                        
+                        if (value)
+                        {
+                            break;
+                        }
+                            
+                    }
+                }
+
                 _displayingWindow = value;
 
                 if (_displayingWindow)
@@ -302,6 +320,7 @@ namespace NomapPrinter
 
             saveMapToFile = config("Map", "Save to file", false, "Save map to file. [Not Synced with Server]", false);
             filePath = config("Map", "Save to file path", "", "File path used to save generated map. [Not Synced with Server]", false);
+            showInRadius = config("Map", "Show map when the table near", defaultValue: 0f, "Distance to nearest map table for map to be shown if set");
             mapDefaultScale = config("Map", "Map zoom default scale", 0.7f, "Default scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
             mapMinimumScale = config("Map", "Map zoom minimum scale", 0.25f, "Minimum scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
             mapMaximumScale = config("Map", "Map zoom maximum scale", 1.0f, "Maximum scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);

@@ -44,5 +44,8 @@ To see pins without map you can use [Compass](https://www.nexusmods.com/valheim/
 
 ## Changelog
 
+v 1.0.3
+ * option to restrict map opening only when near the table
+
 v 1.0.2
  * Initial release
