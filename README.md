@@ -46,6 +46,9 @@ This mod could be handy if you want some map reference for your travels but don'
 
 ## Changelog
 
+v 1.0.5
+ * EpicLoot pins support
+
 v 1.0.4
  * overlapping pins fix
 

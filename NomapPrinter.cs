@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.0.4";
+        const string pluginVersion = "1.0.5";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -59,6 +59,7 @@ namespace NomapPrinter
         private static ConfigEntry<bool> showPinPortal;
         private static ConfigEntry<bool> showPinBed;
         private static ConfigEntry<bool> showPinDeath;
+        private static ConfigEntry<bool> showPinEpicLoot;
 
         private static ConfigEntry<string> messageStart;
         private static ConfigEntry<string> messageSaving;
@@ -347,6 +348,7 @@ namespace NomapPrinter
             showPinPortal = config("Pins list", "Show Portal pins", true, "Show Portal pins on drawed map");
             showPinBed = config("Pins list", "Show Bed pins", false, "Show Bed pins on drawed map");
             showPinDeath = config("Pins list", "Show Death pins", false, "Show Death pins on drawed map");
+            showPinEpicLoot = config("Pins list", "Show Epic Loot pins", true, "Show Epic Loot pins on drawed map");
 
             messageStart = config("Messages", "Drawing begin", "Remembering travels...", "Center message when drawing is started. [Not Synced with Server]", false);
             messageSaving = config("Messages", "Drawing end", "Drawing map...", "Center message when saving file is started. [Not Synced with Server]", false);
@@ -626,7 +628,7 @@ namespace NomapPrinter
         {
             public bool working = false;
             private static Texture2D iconSpriteTexture;   // Current sprite texture is not readable. Saving a cached copy the first time the variable is accessed 
-            private static readonly Dictionary<Vector3, string> pinsToPrint = new Dictionary<Vector3, string>();    // key - map position, value - icon name
+            private static readonly List<KeyValuePair<Vector3, string>> pinsToPrint = new List<KeyValuePair<Vector3, string>>();    // key - map position, value - icon name
             private static int iconSize = 16;  // 16 for normal size, 32 for double size
             private static bool saveToFile = false;
 
@@ -924,8 +926,9 @@ namespace NomapPrinter
                                 continue;
                     }
 
-                    if (IsShowablePinIcon(pin) && !pinsToPrint.ContainsKey(pin.m_pos))
-                        pinsToPrint.Add(pin.m_pos, pin.m_icon.name);
+                    if (IsShowablePinIcon(pin))
+                        pinsToPrint.Add(new KeyValuePair<Vector3, string>(pin.m_pos, pin.m_icon.name));
+
                 }
             }
 
@@ -964,6 +967,12 @@ namespace NomapPrinter
                         return showPinBed.Value;
                     case "mapicon_death":
                         return showPinDeath.Value;
+                    case "mapicon_eventarea":
+                        return showPinEpicLoot.Value;
+                    case "MapIconBounty":
+                        return showPinEpicLoot.Value;
+                    case "TreasureMapIcon":
+                        return showPinEpicLoot.Value;
                 }
 
                 return false;
@@ -983,6 +992,12 @@ namespace NomapPrinter
                         return true;
                     case "mapicon_trader":
                         return true;
+                    case "MapIconBounty":
+                        return showPinEpicLoot.Value;
+                    case "TreasureMapIcon":
+                        return showPinEpicLoot.Value;
+                    case "mapicon_eventarea":
+                        return showPinEpicLoot.Value;
                 }
 
                 return false;
@@ -1036,8 +1051,6 @@ namespace NomapPrinter
 
                 Color32[] iconPixels = result.GetPixels32();
 
-                // textures is small, called once per caching icon
-                Destroy(texture2D);
                 Destroy(result);
 
                 return iconPixels;
@@ -1045,7 +1058,6 @@ namespace NomapPrinter
 
             private static Texture2D GetTextureFromSprite(Sprite sprite)
             {
-
                 if (sprite.rect.width != sprite.texture.width)
                 {
                     int texWid = (int)sprite.rect.width;
@@ -1064,8 +1076,7 @@ namespace NomapPrinter
                 }
                 else
                 {
-                    // not relevant for now, but for compat means
-                    return sprite.texture;
+                    return GetReadableTexture(sprite.texture);
                 }
             }
 

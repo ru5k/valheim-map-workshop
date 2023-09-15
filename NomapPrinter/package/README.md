@@ -44,6 +44,9 @@ To see pins without map you can use [Compass](https://www.nexusmods.com/valheim/
 
 ## Changelog
 
+v 1.0.5
+ * EpicLoot pins support
+
 v 1.0.4
  * overlapping pins fix
 
