@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.0.5";
+        const string pluginVersion = "1.0.6";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -34,6 +34,7 @@ namespace NomapPrinter
 
         private static ConfigEntry<bool> saveMapToFile;
         private static ConfigEntry<string> filePath;
+        private static ConfigEntry<string> loadMapFromFile;
 
         private static ConfigEntry<MapType> mapType;
         private static ConfigEntry<float> mapDefaultScale;
@@ -66,6 +67,8 @@ namespace NomapPrinter
         private static ConfigEntry<string> messageReady;
         private static ConfigEntry<string> messageSavedTo;
         private static ConfigEntry<string> messageNotReady;
+
+        private static readonly CustomSyncedValue<string> mapDataFromFile = new CustomSyncedValue<string>(configSync, "mapDataFromFile", "");
 
         public static World game_world;
         public static float abyss_depth = -100f;
@@ -107,6 +110,10 @@ namespace NomapPrinter
 
         public event EventHandler<ValueChangedEventArgs<bool>> DisplayingWindowChanged;
 
+        private static DirectoryInfo pluginFolder;
+        private static FileSystemWatcher fileSystemWatcher;
+        private static string mapFileName;
+
         public enum MapType
         {
             BirdsEye,
@@ -121,8 +128,12 @@ namespace NomapPrinter
             instance = this;
             maker = new NomapPrinter();
 
+            pluginFolder = new DirectoryInfo(Assembly.GetExecutingAssembly().Location).Parent;
+
             ConfigInit();
             _ = configSync.AddLockingConfigEntry(configLocked);
+
+            mapDataFromFile.ValueChanged += new Action(LoadMapFromSharedValue);
         }
 
         void OnDestroy()
@@ -328,6 +339,7 @@ namespace NomapPrinter
 
             mapType = config("Map", "Map type", MapType.Chart, "Type of showed map. [Not Synced with Server]", false);
             doubleTheSize = config("Map", "Map size 8k", false, "Doubles the map resolution. [Not Synced with Server]", false);
+            loadMapFromFile = config("Map", "Load map from file", "", "Load map from the file name instead of generating one");
 
             showPins = config("Pins", "Show map pins", true, "Show pins on drawed map");
             showExploredPins = config("Pins", "Show only explored pins", true, "Only show pins on explored part of the map");
@@ -360,6 +372,8 @@ namespace NomapPrinter
             Log("Saves going to " + path);
 
             NomapPrinter.InitIconSize();
+
+            SetupMapFileWatcher();
         }
 
         private void ConfigUpdate()
@@ -382,6 +396,89 @@ namespace NomapPrinter
         }
 
         ConfigEntry<T> config<T>(string group, string name, T defaultValue, string description, bool synchronizedSetting = true) => config(group, name, defaultValue, new ConfigDescription(description), synchronizedSetting);
+
+        private static void SetupMapFileWatcher()
+        {
+            if (loadMapFromFile.Value.IsNullOrWhiteSpace())
+                return;
+
+            if (fileSystemWatcher != null)
+            {
+                fileSystemWatcher.Dispose();
+                fileSystemWatcher = null;
+            }
+
+            fileSystemWatcher = new FileSystemWatcher()
+            {
+                Path = Path.GetDirectoryName(loadMapFromFile.Value),
+                Filter = Path.GetFileName(loadMapFromFile.Value)
+            };
+
+            if (fileSystemWatcher.Path.IsNullOrWhiteSpace())
+                fileSystemWatcher.Path = pluginFolder.FullName;
+
+            mapFileName = Path.Combine(fileSystemWatcher.Path, fileSystemWatcher.Filter);
+
+            fileSystemWatcher.Changed += new FileSystemEventHandler(ReadMapFromFile);
+            fileSystemWatcher.Created += new FileSystemEventHandler(ReadMapFromFile);
+            fileSystemWatcher.Renamed += new RenamedEventHandler(ReadMapFromFile);
+            fileSystemWatcher.IncludeSubdirectories = true;
+            fileSystemWatcher.SynchronizingObject = ThreadingHelper.SynchronizingObject;
+            fileSystemWatcher.EnableRaisingEvents = true;
+
+            Log($"Setup watcher {mapFileName}");
+
+            ReadMapFromFile(null, null);
+        }
+
+        private static void ReadMapFromFile(object sender, FileSystemEventArgs eargs)
+        {
+            string fileData = "";
+
+            if (!File.Exists(mapFileName))
+            {
+                Log($"Can't find file ({mapFileName})!");
+                return;
+            }
+            
+            try
+            {
+                fileData = Convert.ToBase64String(File.ReadAllBytes(mapFileName));
+            }
+            catch (Exception e)
+            {
+                Log($"Error reading file ({mapFileName})! Error: {e.Message}");
+            }
+
+            mapDataFromFile.AssignLocalValue(fileData);
+        }
+        private static void LoadMapFromSharedValue()
+        {
+            if (LoadMapFromFileData())
+            {
+                ResetViewerContentSize();
+                mapTextureIsReady = true;
+            }
+        }
+
+        private static bool LoadMapFromFileData()
+        {
+            if (mapDataFromFile.Value.IsNullOrWhiteSpace())
+                return false;
+
+            try
+            {
+                mapTexture.LoadImage(Convert.FromBase64String(mapDataFromFile.Value));
+                mapTexture.Apply();
+            }
+            catch (Exception ex)
+            {
+                Log($"Loading map error. Invalid printed map texture: {ex}");
+                return false;
+            }
+
+            return true;
+        }
 
         private static void ShowMessage(string text, MessageHud.MessageType type = MessageHud.MessageType.Center)
         {
@@ -424,7 +521,13 @@ namespace NomapPrinter
 
         private static bool LoadMapFromPlayer(Player player)
         {
+            if (!modEnabled.Value)
+                return false;
+
             if (player == null)
+                return false;
+
+            if (player != Player.m_localPlayer)
                 return false;
 
             if (!LoadValue(player, saveFieldKey, out string texBase64))
@@ -447,7 +550,13 @@ namespace NomapPrinter
 
         private static void DeleteMapFromPlayer(Player player)
         {
+            if (!modEnabled.Value)
+                return;
+
             if (player == null)
+                return;
+
+            if (player != Player.m_localPlayer)
                 return;
 
             DeleteValue(player, saveFieldKey);
@@ -455,10 +564,16 @@ namespace NomapPrinter
 
         private static void SaveMapToPlayer(Player player)
         {
+            if (!modEnabled.Value)
+                return;
+
             if (player == null)
                 return;
 
-            if (mapTextureIsReady)
+            if (player != Player.m_localPlayer)
+                return;
+
+            if (mapTextureIsReady && loadMapFromFile.Value.IsNullOrWhiteSpace())
             {
                 try
                 {
@@ -618,6 +733,9 @@ namespace NomapPrinter
                     return;
 
                 instance.ConfigUpdate();
+
+                if (!loadMapFromFile.Value.IsNullOrWhiteSpace())
+                    return;
 
                 if (!instance.maker.working) 
                     instance.StartCoroutine(instance.maker.Go());

@@ -2,8 +2,15 @@
 
 # Nomap Printer
 In nomap mode reading the Cartography Table will generate a simplified map and save it to player save file to be shown by pressing usual map key.
+
 This mod was designed to enhance nomap playthroughs for players to look at their current exploration progress without the spoiler of live updates.
+
 This mod could be handy if you want some map reference for your travels but don't want to draw map yourself in paint or w/e.
+
+
+If you don't want this generated map and have your own file you can set its name in "Load map from file" and it will be shared to all clients from the server.
+
+File can be set as full qualified name or just file name without path. Latter one should be placed near dll file in any subdirectory.
 
 ## Main features:
 * generates static map based on algorithms of [MapPrinter](https://valheim.thunderstore.io/package/ASpy/MapPrinter/) mod by ASpy (all credits to him)
@@ -39,12 +46,22 @@ This mod could be handy if you want some map reference for your travels but don'
 * Gamepad isn't supported for ingame map window
 * I didn't test map saving between sessions with ServerCharacters mod
 
+## Configurating
+The best way to handle configs is configuration manager. Choose one that works for you:
+
+https://www.nexusmods.com/site/mods/529
+
+https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationManager/
+
 ## Mirrors
 [Nexus](https://www.nexusmods.com/valheim/mods/2505)
 
 [Thunderstore](https://valheim.thunderstore.io/package/shudnal/NomapPrinter/)
 
 ## Changelog
+
+v 1.0.6
+ * external map file support
 
 v 1.0.5
  * EpicLoot pins support
