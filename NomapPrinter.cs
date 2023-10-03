@@ -15,11 +15,11 @@ using ServerSync;
 namespace NomapPrinter
 {
     [BepInPlugin(pluginID, pluginName, pluginVersion)]
-    public class ValheimMod : BaseUnityPlugin
+    public class NomapPrinter : BaseUnityPlugin
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.0.6";
+        const string pluginVersion = "1.0.7";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -35,6 +35,7 @@ namespace NomapPrinter
         private static ConfigEntry<bool> saveMapToFile;
         private static ConfigEntry<string> filePath;
         private static ConfigEntry<string> loadMapFromFile;
+        private static ConfigEntry<bool> showMapIngame;
 
         private static ConfigEntry<MapType> mapType;
         private static ConfigEntry<float> mapDefaultScale;
@@ -82,8 +83,8 @@ namespace NomapPrinter
         private static Color32[] m_fogmap;
         private static int[] heightBytes;
 
-        NomapPrinter maker;
-        private static ValheimMod instance;
+        MapGeneration maker;
+        private static NomapPrinter instance;
 
         private static string path;
 
@@ -126,7 +127,7 @@ namespace NomapPrinter
         {
             harmony.PatchAll();
             instance = this;
-            maker = new NomapPrinter();
+            maker = new MapGeneration();
 
             pluginFolder = new DirectoryInfo(Assembly.GetExecutingAssembly().Location).Parent;
 
@@ -266,6 +267,9 @@ namespace NomapPrinter
         {
             get
             {
+                if (!showMapIngame.Value) 
+                    return false;
+
                 Player localPlayer = Player.m_localPlayer;
 
                 return !(localPlayer == null || localPlayer.IsDead() || localPlayer.InCutscene() || localPlayer.IsTeleporting()) &&
@@ -331,6 +335,7 @@ namespace NomapPrinter
             loggingEnabled = config("Logging", "Enabled", false, "Enable logging. [Not Synced with Server]", false);
 
             saveMapToFile = config("Map", "Save to file", false, "Save map to file. [Not Synced with Server]", false);
+            showMapIngame = config("Map", "Show map", true, "Show map at ingame window. [Not Synced with Server]", false);
             filePath = config("Map", "Save to file path", "", "File path used to save generated map. [Not Synced with Server]", false);
             showInRadius = config("Map", "Show map when the table near", defaultValue: 0f, "Distance to nearest map table for map to be shown if set");
             mapDefaultScale = config("Map", "Map zoom default scale", 0.7f, "Default scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
@@ -371,7 +376,7 @@ namespace NomapPrinter
             path = filePath.Value == "" ? Path.Combine(Utils.GetSaveDataPath(FileHelpers.FileSource.Local), "screenshots") : filePath.Value;
             Log("Saves going to " + path);
 
-            NomapPrinter.InitIconSize();
+            MapGeneration.InitIconSize();
 
             SetupMapFileWatcher();
         }
@@ -742,7 +747,7 @@ namespace NomapPrinter
             }
         }
 
-        private class NomapPrinter : MonoBehaviour
+        private class MapGeneration : MonoBehaviour
         {
             public bool working = false;
             private static Texture2D iconSpriteTexture;   // Current sprite texture is not readable. Saving a cached copy the first time the variable is accessed 
