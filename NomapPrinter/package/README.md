@@ -58,6 +58,9 @@ https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationMa
 
 ## Changelog
 
+v 1.0.8
+* patch 0.217.22
+
 v 1.0.7
  * option to not showing the map ingame
 
