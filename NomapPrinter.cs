@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.0.8";
+        const string pluginVersion = "1.0.10";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -1143,7 +1143,7 @@ namespace NomapPrinter
             {
                 Color32[] iconPixels = GetIconPixels(icon, iconSize, iconSize);
 
-                if (iconPixels.Length == 1)
+                if (iconPixels == null || iconPixels.Length <= 1)
                     return false;
 
                 pinIcons.Add(icon.name, iconPixels);
@@ -1153,6 +1153,8 @@ namespace NomapPrinter
             private static Color32[] GetIconPixels(Sprite icon, int targetX, int targetY)
             {
                 Texture2D texture2D = GetTextureFromSprite(icon);
+                if (texture2D == null)
+                    return null;
 
                 RenderTexture tmp = RenderTexture.GetTemporary(
                                                     targetX,
@@ -1181,6 +1183,12 @@ namespace NomapPrinter
 
             private static Texture2D GetTextureFromSprite(Sprite sprite)
             {
+                if (sprite.texture == null)
+                    return null;
+
+                if (sprite.texture.width == 0 || sprite.texture.height == 0)
+                    return null;
+
                 if (sprite.rect.width != sprite.texture.width)
                 {
                     int texWid = (int)sprite.rect.width;
@@ -1197,10 +1205,9 @@ namespace NomapPrinter
                     newTex.Apply();
                     return newTex;
                 }
-                else
-                {
-                    return GetReadableTexture(sprite.texture);
-                }
+                
+
+                return GetReadableTexture(sprite.texture);
             }
 
             private static Texture2D GetIconSpriteTexture(Texture2D texture2D)
