@@ -162,8 +162,8 @@ public class MapImageGeneration
         yield return OverlayTexture(m_mapTexture, oceanTexture);
         Color32[] outtex = result;
 
-        yield return CreateShadowMap(m_heightmap, 23);
-        Color32[] shadowmap = result;
+        //yield return CreateShadowMap(m_heightmap, 23);
+        //Color32[] shadowmap = result;
 
         yield return DarkenTextureLinear(outtex, 20);
         outtex = result;
@@ -174,8 +174,8 @@ public class MapImageGeneration
         yield return OverlayTexture(outtex, contours);
         outtex = result;
 
-        yield return OverlayTexture(outtex, shadowmap);
-        outtex = result;
+        //yield return OverlayTexture(outtex, shadowmap);
+        //outtex = result;
 
         yield return StylizeFog(m_fogmap);
         Color32[] fog = result;
@@ -388,6 +388,7 @@ public class MapImageGeneration
             {
                 if (input[i].b > 0)    //Below sea level
                 {
+                    /*
                     int correction = i / m_textureSize;
                     correction = (correction / 8) - 128;           //correction goes from -128 to 127
                     int correction2 = i % m_textureSize;
@@ -395,19 +396,23 @@ public class MapImageGeneration
 
                     int correction3 = ((correction * correction) / 128) + ((correction2 * correction2) / 512);
 
-
                     //if (correction < 0) m_oceanColor = new Color32((byte)(30+correction3), (byte)(240-correction3), 255, 255);
                     //else m_oceanColor = new Color32(30, (byte)(240-correction3), (byte)(255-(correction3/2)), 255);
+                    
 
-                    if (correction < 0) m_oceanColor = new Color32((byte)(10 + correction3), (byte)(136 - (correction3 / 4)), (byte)(193), 255);  //South         83, 116, 196
-                    else m_oceanColor = new Color32((byte)(10 + (correction3 / 2)), (byte)(136), (byte)(193 - (correction3 / 2)), 255);             //North/
-
+                    if (correction < 0)
+                        m_oceanColor = new Color32((byte)(10 + correction3), (byte)(136 - (correction3 / 4)), (byte)(193), 255);  //South         83, 116, 196
+                    else 
+                        m_oceanColor = new Color32((byte)(10 + (correction3 / 2)), (byte)(136), (byte)(193 - (correction3 / 2)), 255);             //North/
+                    */
                     output[i] = m_oceanColor;
                     int alpha = (input[i].b * 16) + 128;
-                    if (alpha > 255) alpha = 255;
+                    if (alpha > 255) 
+                        alpha = 255;
                     output[i].a = (byte)alpha;
                 }
-                else output[i] = Color.clear;
+                else 
+                    output[i] = Color.clear;
             }
         });
 

@@ -5,7 +5,7 @@
 			<InputAssemblies Include="$(TargetPath)" />
 			<InputAssemblies Include="$(OutputPath)ServerSync.dll" />
 		</ItemGroup>
-		<ILRepack Parallel="true" DebugInfo="false" Internalize="true" InputAssemblies="@(InputAssemblies)" OutputFile="F:\Steam\steamapps\common\Valheim\BepInEx\plugins\$(TargetFileName)" TargetKind="SameAsPrimaryAssembly" LibraryPath="$(OutputPath)" />
+		<ILRepack Parallel="true" DebugInfo="false" Internalize="true" InputAssemblies="@(InputAssemblies)" OutputFile="$(OutputPath)bepinex.plugins\$(TargetFileName)" TargetKind="SameAsPrimaryAssembly" LibraryPath="$(OutputPath)" />
 		<ILRepack Parallel="true" DebugInfo="false" Internalize="true" InputAssemblies="@(InputAssemblies)" OutputFile="$(TargetPath)" TargetKind="SameAsPrimaryAssembly" LibraryPath="$(OutputPath)" />
 	</Target>
 </Project>
