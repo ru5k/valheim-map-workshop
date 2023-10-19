@@ -384,32 +384,40 @@ public class MapImageGeneration
 
         var internalThread = new Thread(() =>
         {
+            int divider = m_textureSize / 256;
+
             for (int i = 0; i < m_textureSize * m_textureSize; i++)
             {
                 if (input[i].b > 0)    //Below sea level
                 {
-                    /*
-                    int correction = i / m_textureSize;
-                    correction = (correction / 8) - 128;           //correction goes from -128 to 127
-                    int correction2 = i % m_textureSize;
-                    correction2 = (correction2 / 8) - 128;       //correction2 goes from -128 to 127
+                    int correction1 = ((i / m_textureSize) / divider) - 128;  // correction1 goes from -128 to 127
+                    int correction2 = ((i % m_textureSize) / divider) - 128;  // correction2 goes from -128 to 127
 
-                    int correction3 = ((correction * correction) / 128) + ((correction2 * correction2) / 512);
+                    int correction3 = ((correction1 * correction1) / 128) + ((correction2 * correction2) / 512);
 
                     //if (correction < 0) m_oceanColor = new Color32((byte)(30+correction3), (byte)(240-correction3), 255, 255);
                     //else m_oceanColor = new Color32(30, (byte)(240-correction3), (byte)(255-(correction3/2)), 255);
-                    
 
-                    if (correction < 0)
-                        m_oceanColor = new Color32((byte)(10 + correction3), (byte)(136 - (correction3 / 4)), (byte)(193), 255);  //South         83, 116, 196
-                    else 
-                        m_oceanColor = new Color32((byte)(10 + (correction3 / 2)), (byte)(136), (byte)(193 - (correction3 / 2)), 255);             //North/
-                    */
-                    output[i] = m_oceanColor;
                     int alpha = (input[i].b * 16) + 128;
-                    if (alpha > 255) 
-                        alpha = 255;
-                    output[i].a = (byte)alpha;
+
+                    if (correction1 < 0)
+                    {
+                        //m_oceanColor = new Color32((byte)(10 + correction3), (byte)(136 - (correction3 / 4)), (byte)(193), (byte)(alpha > 255 ? 255 : alpha));        // South  83, 116, 196
+                        output[i].r = (byte)( 10 + correction3);
+                        output[i].g = (byte)(136 - (correction3 / 4));
+                        output[i].b = (byte)(193);
+                        output[i].a = (byte)(alpha > 255 ? 255 : alpha);
+                    }
+                    else
+                    {
+                        //m_oceanColor = new Color32((byte)(10 + (correction3 / 2)), (byte)(136), (byte)(193 - (correction3 / 2)), (byte)(alpha > 255 ? 255 : alpha));  // North
+                        output[i].r = (byte)( 10 + (correction3 / 2));
+                        output[i].g = (byte)(136);
+                        output[i].b = (byte)(193 - (correction3 / 2));
+                        output[i].a = (byte)(alpha > 255 ? 255 : alpha);
+                    }
+
+                    //output[i]. = m_oceanColor;
                 }
                 else 
                     output[i] = Color.clear;

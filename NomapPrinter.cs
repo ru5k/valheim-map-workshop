@@ -366,7 +366,7 @@ namespace NomapPrinter
             config("General", "NexusID", 2505, "Nexus mod ID for updates", false);
 
             modEnabled = config("General", "Enabled", true, "Print map on table interaction");
-            enabledOnlyInNoMapMode = config("General", "No Map Only Enabled", true, "Print map on table interaction only in 'no map' mode");
+            enabledOnlyInNoMapMode = config("General", "Enabled only in no map mode", true, "Print map on table interaction only in 'no map' mode");
             configLocked = config("General", "Lock Configuration", defaultValue: true, "Configuration is locked and can be changed by server admins only.");
 
             loggingEnabled = config("Logging", "Enabled", false, "Enable logging. [Not Synced with Server]", false);
@@ -962,8 +962,17 @@ namespace NomapPrinter
                 if (saveToFile)
                 {
                     Log($"Writing {filename}");
-                    File.WriteAllBytes(filename, ImageConversion.EncodeToPNG(mapTexture));
-                    ShowMessage($"{messageSavedTo.Value} {path}", MessageHud.MessageType.TopLeft);
+                    try
+                    {
+                        Directory.CreateDirectory(path);
+                        File.WriteAllBytes(filename, ImageConversion.EncodeToPNG(mapTexture));
+
+                        ShowMessage($"{messageSavedTo.Value} {filename}", MessageHud.MessageType.TopLeft);
+                    }
+                    catch (Exception e)
+                    {
+                        ShowMessage($"Failed to save map to file {filename}: {e.Message}", MessageHud.MessageType.TopLeft);
+                    }
                 }
             }
 
