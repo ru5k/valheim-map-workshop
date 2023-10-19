@@ -11,6 +11,7 @@ using System.Threading;
 using UnityEngine;
 using UnityEngine.UI;
 using ServerSync;
+using static NomapPrinter.NomapPrinter;
 
 namespace NomapPrinter
 {
@@ -21,14 +22,16 @@ namespace NomapPrinter
         const string pluginName = "Nomap Printer";
         const string pluginVersion = "1.0.10";
 
+        const int    m_maxScaleFactor = 4;
+
         private readonly Harmony harmony = new Harmony(pluginID);
 
         internal static readonly ConfigSync configSync = new ConfigSync(pluginID) { DisplayName = pluginName, CurrentVersion = pluginVersion, MinimumRequiredVersion = pluginVersion };
 
         private static ConfigEntry<bool> modEnabled;
-        private static ConfigEntry<bool> noMapOnlyEnabled;
+        private static ConfigEntry<bool> enabledOnlyInNoMapMode;
         private static ConfigEntry<bool> configLocked;
-        private static ConfigEntry<bool> doubleTheSize;
+        //private static ConfigEntry<bool> doubleTheSize;
         private static ConfigEntry<float> showInRadius; 
 
         private static ConfigEntry<bool> loggingEnabled;
@@ -39,6 +42,7 @@ namespace NomapPrinter
         private static ConfigEntry<bool> showMapIngame;
 
         private static ConfigEntry<MapType> mapType;
+        private static ConfigEntry<MapSize> mapSize;
         private static ConfigEntry<float> mapDefaultScale;
         private static ConfigEntry<float> mapMinimumScale;
         private static ConfigEntry<float> mapMaximumScale;
@@ -78,8 +82,9 @@ namespace NomapPrinter
         public static World game_world;
         public static float abyss_depth = -100f;
 
-        static int m_textureSize;
-        static int m_waterLevel;
+        //static int m_textureSize;
+        //static int m_waterLevel;
+        
 
         private static Color32[] m_mapTexture;
         private static Color32[] m_forestTexture;
@@ -125,6 +130,13 @@ namespace NomapPrinter
             Topographical,
             Chart,
             OldChart
+        }
+
+        public enum MapSize
+        {
+            Original,
+            Double,
+            Quadruple
         }
 
         void Awake()
@@ -190,7 +202,7 @@ namespace NomapPrinter
             if (!mapWindowInitialized)
                 return;
 
-            if (noMapOnlyEnabled.Value && !Game.m_noMap)
+            if (enabledOnlyInNoMapMode.Value && !Game.m_noMap)
                 return;
 
             if (CanOperateMap)
@@ -226,12 +238,31 @@ namespace NomapPrinter
             }
         }
 
+        private static int GetScaleFactor()
+        {
+            int factor;
+
+            switch (mapSize.Value)
+            {
+                case MapSize.Original:  factor = 1; break;
+                case MapSize.Double:    factor = 2; break;
+                case MapSize.Quadruple: factor = 4; break;
+                default:
+                    factor = 1;
+                    break;
+            }
+
+            return factor;
+        }
+
         private static void ZoomMap(float increment)
         {
             mapCurrentScale = (increment == 0f) ? mapDefaultScale.Value : mapCurrentScale + increment / 2;
 
-            float minScale = Math.Max(mapMinimumScale.Value, 0.1f) * (doubleTheSize.Value ? 1 : 2);
-            float maxScale = Math.Min(mapMaximumScale.Value, 2f) * (doubleTheSize.Value ? 1 : 2);
+            int factor = m_maxScaleFactor / GetScaleFactor();
+
+            float minScale = Math.Max(mapMinimumScale.Value, 0.1f) * factor;
+            float maxScale = Math.Min(mapMaximumScale.Value, 2.0f) * factor;
 
             if (mapCurrentScale >= maxScale)
             {
@@ -241,6 +272,7 @@ namespace NomapPrinter
             {
                 mapCurrentScale = minScale;
             }
+
             content.localScale = new Vector2(mapCurrentScale, mapCurrentScale);
         }
 
@@ -334,7 +366,7 @@ namespace NomapPrinter
             config("General", "NexusID", 2505, "Nexus mod ID for updates", false);
 
             modEnabled = config("General", "Enabled", true, "Print map on table interaction");
-            noMapOnlyEnabled = config("General", "No Map Only Enabled", true, "Print map on table interaction only in 'no map' mode");
+            enabledOnlyInNoMapMode = config("General", "No Map Only Enabled", true, "Print map on table interaction only in 'no map' mode");
             configLocked = config("General", "Lock Configuration", defaultValue: true, "Configuration is locked and can be changed by server admins only.");
 
             loggingEnabled = config("Logging", "Enabled", false, "Enable logging. [Not Synced with Server]", false);
@@ -347,12 +379,13 @@ namespace NomapPrinter
             mapMinimumScale = config("Map", "Map zoom minimum scale", 0.25f, "Minimum scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
             mapMaximumScale = config("Map", "Map zoom maximum scale", 1.0f, "Maximum scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
 
-            mapType = config("Map", "Map type", MapType.Chart, "Type of showed map. [Not Synced with Server]", false);
+            mapType = config("Map", "Map type", MapType.Chart, "Type of rendered map. [Not Synced with Server]", false);
+            mapSize = config("Map", "Map size", MapSize.Double, "Size of rendered map. [Not Synced with Server]", false);
             mapHeightDivider = config("Map", "Height divider", 256, "Original height value divider. [Not Synced with Server]", false);
             mapDepthDivider = config("Map", "Depth divider", 256, "Original depth value divider. [Not Synced with Server]", false);
             mapContourInterval = config("Map", "Contour interval", 8, "Contour interval. [Not Synced with Server]", false);
 
-            doubleTheSize = config("Map", "Map size 8k", false, "Doubles the map resolution. [Not Synced with Server]", false);
+            //doubleTheSize = config("Map", "Map size 8k", false, "Doubles the map resolution. [Not Synced with Server]", false);
             loadMapFromFile = config("Map", "Load map from file", "", "Load map from the file name instead of generating one");
 
             showPins = config("Pins", "Show map pins", true, "Show pins on drawed map");
@@ -385,7 +418,7 @@ namespace NomapPrinter
             path = filePath.Value == "" ? Path.Combine(Utils.GetSaveDataPath(FileHelpers.FileSource.Local), "screenshots") : filePath.Value;
             Log("Saves going to " + path);
 
-            MapGeneration.InitIconSize();
+            MapGeneration.InitIconSize(GetScaleFactor());
 
             SetupMapFileWatcher();
         }
@@ -395,8 +428,8 @@ namespace NomapPrinter
             Config.Reload();
             ConfigInit();
 
-            m_waterLevel = (int)ZoneSystem.instance.m_waterLevel;
-            m_textureSize = 2 * Minimap.instance.m_textureSize;
+            //m_waterLevel = (int)ZoneSystem.instance.m_waterLevel;
+            //m_textureSize = 2 * Minimap.instance.m_textureSize;
         }
 
         ConfigEntry<T> config<T>(string group, string name, T defaultValue, ConfigDescription description, bool synchronizedSetting = true)
@@ -743,7 +776,7 @@ namespace NomapPrinter
                 if (!modEnabled.Value) 
                     return;
 
-                if (noMapOnlyEnabled.Value && !Game.m_noMap)
+                if (enabledOnlyInNoMapMode.Value && !Game.m_noMap)
                     return;
 
                 instance.ConfigUpdate();
@@ -763,6 +796,8 @@ namespace NomapPrinter
             private static readonly List<KeyValuePair<Vector3, string>> pinsToPrint = new List<KeyValuePair<Vector3, string>>();    // key - map position, value - icon name
             private static int iconSize = 16;  // 16 for normal size, 32 for double size
             private static bool saveToFile = false;
+
+            private static int m_textureSize;
 
             public IEnumerator Go()
             {
@@ -817,9 +852,16 @@ namespace NomapPrinter
 
             private IEnumerator PrepareTerrainData()
             {
-                float m_pixelSize = (float)Minimap.instance.m_pixelSize / 2f;
+                int scaleFactor = GetScaleFactor();
+                
+                m_textureSize = scaleFactor * Minimap.instance.m_textureSize;
+                
+                float m_pixelSize = (float)Minimap.instance.m_pixelSize / scaleFactor;
+                int   m_waterLevel = (int)ZoneSystem.instance.m_waterLevel;
+
                 int num = m_textureSize / 2;
                 float num2 = m_pixelSize / 2f;
+
                 Color32[] array = new Color32[m_textureSize * m_textureSize];
                 Color32[] array2 = new Color32[m_textureSize * m_textureSize];
                 Color32[] array3 = new Color32[m_textureSize * m_textureSize];
@@ -832,38 +874,44 @@ namespace NomapPrinter
                 {
                     for (int i = 0; i < m_textureSize; i++)
                     {
+                        float wy = (float)(i - num) * m_pixelSize + num2;
+
                         for (int j = 0; j < m_textureSize; j++)
                         {
                             float wx = (float)(j - num) * m_pixelSize + num2;
-                            float wy = (float)(i - num) * m_pixelSize + num2;
+
+                            int n = i * m_textureSize + j;
+
                             Heightmap.Biome biome = WorldGenerator.instance.GetBiome(wx, wy);
                             float biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color _);
-                            array2[i * m_textureSize + j] = GetMaskColor(wx, wy, biomeHeight, biome);
+                            float height = biomeHeight - m_waterLevel;  //Set zero point to sea level.
+
+                            array2[n] = GetMaskColor(wx, wy, height, biome);
 
                             if (biomeHeight > abyss_depth)          //Are we on map?
                             {
                                 //Height Arrays
-                                float height = biomeHeight - m_waterLevel;  //Set zero point to sea level.
-                                //heightBytes[i * m_textureSize + j] = (int)height;
+                                
+                                //heightBytes[n] = (int)height;
                                 if (height > 0)
-                                    array3[i * m_textureSize + j] = new Color(height / mapHeightDivider.Value, 0f, 0f);
+                                    array3[n] = new Color(height / mapHeightDivider.Value, 0f, 0f);
                                 else
-                                    array3[i * m_textureSize + j] = new Color(0f, 0f, height / (-1 * mapDepthDivider.Value));
+                                    array3[n] = new Color(0f, 0f, height / (-1 * mapDepthDivider.Value));
 
                                 //Biome data
-                                array[i * m_textureSize + j] = GetPixelColor(biome, biomeHeight);
+                                array[n] = GetPixelColor(biome, biomeHeight);
 
                                 //Exploration Data
-                                Color pixel = fogTexture.GetPixel(j / 2, i / 2);
+                                Color pixel = fogTexture.GetPixel(j / scaleFactor, i / scaleFactor);
                                 if (pixel.r != 0f && pixel.g != 0f)  // Draw fogmap
-                                    array4[i * m_textureSize + j] = Color.gray;
+                                    array4[n] = Color.gray;
                                 else
-                                    array4[i * m_textureSize + j] = Color.clear;
+                                    array4[n] = Color.clear;
 
                             }
                             else
                             {   //Do this when off map
-                                array[i * m_textureSize + j] = Color.black;
+                                array[n] = Color.black;
                             }
                         }
                     }
@@ -893,10 +941,10 @@ namespace NomapPrinter
                 int mapSize = (int)Math.Sqrt(map.Length);
 
                 // If someone want even bigger, most smooth icons.
-                if (doubleTheSize.Value)
-                {
-                    DoubleMapSize(ref map, out mapSize);
-                }
+                //if (doubleTheSize.Value)
+                //{
+                //    DoubleMapSize(ref map, out mapSize);
+                //}
 
                 if (showPins.Value)
                 {
@@ -976,7 +1024,7 @@ namespace NomapPrinter
                 Color noForest = new Color(0f, 0f, 0f, 0f);
                 Color forest = new Color(1f, 0f, 0f, 0f);
 
-                if (height < m_waterLevel)
+                if (height < 0)
                 {
                     return noForest;
                 }
@@ -1270,9 +1318,9 @@ namespace NomapPrinter
                 return newTexture;
             }
 
-            public static void InitIconSize()
+            public static void InitIconSize(int scaleFactor)
             {
-                int newSize = (doubleTheSize.Value) ? 32 : 16;
+                int newSize = 16 * scaleFactor;
 
                 if (iconSize == newSize)
                     return;
