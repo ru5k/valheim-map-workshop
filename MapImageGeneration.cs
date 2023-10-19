@@ -378,21 +378,19 @@ public class MapImageGeneration
 
     private IEnumerator GenerateOceanTexture(Color32[] input)
     {
-        Color32[] output;
-        Color32 m_oceanColor = new Color32(20, 100, 255, 255);
-        output = new Color32[input.Length];
+        Color32[] output = new Color32[input.Length];
+        //Color32 m_oceanColor = new Color32(20, 100, 255, 255);
 
         var internalThread = new Thread(() =>
         {
             int divider = m_textureSize / 256;
 
-            for (int i = 0; i < m_textureSize * m_textureSize; i++)
+            for (int i = 0; i < input.Length; i++)
             {
                 if (input[i].b > 0)    //Below sea level
                 {
                     int correction1 = ((i / m_textureSize) / divider) - 128;  // correction1 goes from -128 to 127
                     int correction2 = ((i % m_textureSize) / divider) - 128;  // correction2 goes from -128 to 127
-
                     int correction3 = ((correction1 * correction1) / 128) + ((correction2 * correction2) / 512);
 
                     //if (correction < 0) m_oceanColor = new Color32((byte)(30+correction3), (byte)(240-correction3), 255, 255);
@@ -400,22 +398,24 @@ public class MapImageGeneration
 
                     int alpha = (input[i].b * 16) + 128;
 
+                    ref Color32 pixel = ref output[i];
+
                     if (correction1 < 0)
                     {
                         //m_oceanColor = new Color32((byte)(10 + correction3), (byte)(136 - (correction3 / 4)), (byte)(193), (byte)(alpha > 255 ? 255 : alpha));        // South  83, 116, 196
-                        output[i].r = (byte)( 10 + correction3);
-                        output[i].g = (byte)(136 - (correction3 / 4));
-                        output[i].b = (byte)(193);
-                        output[i].a = (byte)(alpha > 255 ? 255 : alpha);
+                        pixel.r = (byte)( 10 + correction3);
+                        pixel.g = (byte)(136 - (correction3 / 4));
+                        pixel.b = (byte)(193);
                     }
                     else
                     {
                         //m_oceanColor = new Color32((byte)(10 + (correction3 / 2)), (byte)(136), (byte)(193 - (correction3 / 2)), (byte)(alpha > 255 ? 255 : alpha));  // North
-                        output[i].r = (byte)( 10 + (correction3 / 2));
-                        output[i].g = (byte)(136);
-                        output[i].b = (byte)(193 - (correction3 / 2));
-                        output[i].a = (byte)(alpha > 255 ? 255 : alpha);
+                        pixel.r = (byte)( 10 + (correction3 / 2));
+                        pixel.g = (byte)(136);
+                        pixel.b = (byte)(193 - (correction3 / 2));
                     }
+
+                    pixel.a = (byte)(alpha > 255 ? 255 : alpha);
 
                     //output[i]. = m_oceanColor;
                 }
