@@ -7,7 +7,7 @@ public class MapImageGeneration
 {
     private static Color32[] m_mapTexture;
     private static Color32[] m_forestTexture;
-    private static Color32[] m_heightmap;
+    private static Color[] m_heightmap;
     private static Color32[] m_fogmap;
     private static int m_textureSize;
     private Color32[] result;
@@ -15,7 +15,7 @@ public class MapImageGeneration
 
     public static Color32 yellowMap = new Color32(203, 155, 87, byte.MaxValue);
     
-    public static void Initialize(Color32[] biomes, Color32[] forests, Color32[] height, Color32[] exploration, int texture_size)
+    public static void Initialize(Color32[] biomes, Color32[] forests, Color[] height, Color32[] exploration, int texture_size)
     {
         m_mapTexture = biomes;
         m_forestTexture = forests;
@@ -168,6 +168,9 @@ public class MapImageGeneration
         yield return DarkenTextureLinear(outtex, 20);
         outtex = result;
 
+        yield return DarkenTextureRelativeByMask(outtex, m_forestTexture, 0.85f);
+        outtex = result;
+
         yield return GenerateContourMap(m_heightmap, graduationHeight, 128);
         Color32[] contours = result;
 
@@ -283,7 +286,38 @@ public class MapImageGeneration
         result = output;
     }
 
-    private IEnumerator CreateShadowMap(Color32[] heightmap, byte intensity)
+    private IEnumerator DarkenTextureRelativeByMask(Color32[] array, Color32[] maskArray, float dimFactor)
+    {
+        Color32[] output = new Color32[m_textureSize * m_textureSize];
+
+        var internalThread = new Thread(() =>
+        {
+            for (int i = 0; i < m_textureSize * m_textureSize; i++)
+            {
+                if (maskArray[i].r == 0)
+                {
+                    output[i] = array[i];
+                }
+                else
+                {
+                    output[i].r = (byte)(array[i].r * dimFactor);
+                    output[i].g = (byte)(array[i].g * dimFactor);
+                    output[i].b = (byte)(array[i].b * dimFactor);
+                    output[i].a = array[i].a;
+                }
+            }
+        });
+
+        internalThread.Start();
+        while (internalThread.IsAlive == true)
+        {
+            yield return null;
+        }
+
+        result = output;
+    }
+
+    private IEnumerator CreateShadowMap(Color[] heightmap, byte intensity)
     {
         yield return CreateHardShadowMap(heightmap, intensity);
         Color32[] hardshadows = result;
@@ -293,7 +327,7 @@ public class MapImageGeneration
         yield return LerpTextures(softshadows, hardshadows);
     }
 
-    private IEnumerator CreateSoftShadowMap(Color32[] input)
+    private IEnumerator CreateSoftShadowMap(Color[] input)
     {
         Color32[] output;
 
@@ -308,7 +342,7 @@ public class MapImageGeneration
                     int pixel;
                     if (i > 0)
                     {
-                        pixel = input[i * m_textureSize + j].r - input[(i - 1) * m_textureSize + j].r;
+                        pixel = (int)(input[i * m_textureSize + j].r - input[(i - 1) * m_textureSize + j].r);
                     }
                     else pixel = 0;
 
@@ -332,7 +366,7 @@ public class MapImageGeneration
         result = output;
     }
 
-    private IEnumerator CreateHardShadowMap(Color32[] input, byte intensity)
+    private IEnumerator CreateHardShadowMap(Color[] input, byte intensity)
     {
         Color32[] output;
 
@@ -376,7 +410,7 @@ public class MapImageGeneration
         result = output;
     }
 
-    private IEnumerator GenerateOceanTexture(Color32[] input)
+    private IEnumerator GenerateOceanTexture(Color[] input)
     {
         Color32[] output = new Color32[input.Length];
         //Color32 m_oceanColor = new Color32(20, 100, 255, 255);
@@ -396,7 +430,7 @@ public class MapImageGeneration
                     //if (correction < 0) m_oceanColor = new Color32((byte)(30+correction3), (byte)(240-correction3), 255, 255);
                     //else m_oceanColor = new Color32(30, (byte)(240-correction3), (byte)(255-(correction3/2)), 255);
 
-                    int alpha = (input[i].b * 16) + 128;
+                    int alpha = (int)(input[i].b * 16) + 128;
 
                     ref Color32 pixel = ref output[i];
 
@@ -486,49 +520,58 @@ public class MapImageGeneration
         result = output;
     }
 
-    private IEnumerator GenerateContourMap(Color32[] start, int graduations, byte alpha)
+    private IEnumerator GenerateContourMap(Color[] start, int graduations, byte alpha)
     {
-        Color32[] input;
+        int[] input;
         Color32[] output;
 
-
-        input = new Color32[start.Length];
+        input = new int[start.Length];
         output = new Color32[input.Length];
 
         var internalThread = new Thread(() =>
         {
-            for (int i = 0; i < (m_textureSize * m_textureSize); i++)    //Shift height values up by graduation so that coast is outlined with a contour line
+            // Shift height values up by graduation so that coast is outlined with a contour line
+            for (int i = 0; i < (m_textureSize * m_textureSize); i++)
             {
-                int newR = (start[i].r + graduations);
-                if (newR > 255) newR = 255;
-                if (start[i].b > 0) newR = 0;
-                input[i].r = (byte)newR;
+                //float newR = 0;
+                if (start[i].b > 0)
+                {
+                    input[i] = 0;
+                }
+                else
+                {
+                    input[i] = ((int)start[i].r + graduations) / graduations;
+                    //if (newR > 255) newR = 255;
+                }
             }
 
             for (int y = 1; y < (m_textureSize - 1); y++)
             {
                 int yCoord = y * m_textureSize;
+
                 for (int x = 1; x < (m_textureSize - 1); x++)
                 {
-                    int testCoord = yCoord + x;    //Flattened 2D coords of pixel under test
-                    int heightRef = input[yCoord + x].r / graduations;      //Which graduation does the height under test fall under?
-                    output[testCoord] = Color.clear;     //Default color is clear
+                    int testCoord = yCoord + x;        // Flattened 2D coords of pixel under test
+                    int heightRef = input[testCoord];  // Which graduation does the height under test fall under?
+
+                    output[testCoord] = Color.clear;   // Default color is clear
 
                     for (int i = -1; i < 2; i++)
                     {
                         int iCoord = i * m_textureSize;
+
                         for (int j = -1; j < 2; j++)
                         {
-
                             if (!((i == 0) && (j == 0)))      //Don't check self
                             {
                                 int scanCoord = testCoord + iCoord + j; //Flattened 2D coords of adjacent pixel to be checked
-                                int testHeight = input[scanCoord].r / graduations;
+                                int testHeight = input[scanCoord];
 
                                 if (testHeight < heightRef)  //Is scanned adjacent coordinate in a lower graduation? //If so, this pixel is black
                                 {
                                     byte alpha2 = alpha;
-                                    if ((heightRef % 5) - 1 != 0) alpha2 /= 2;  //Keep full alpha for every 5th graduation line. Half alpha for the rest 
+                                    if ((heightRef % 5) - 1 != 0)
+                                        alpha2 /= 2;  //Keep full alpha for every 5th graduation line. Half alpha for the rest 
 
                                     if ((i != 0) && (j != 0) && (output[testCoord].a != alpha2))       //Detected at diagonal
                                         output[testCoord] = new Color32(0, 0, 0, (byte)(alpha2 / 2));   //Gets half alpha for a smoother effect
@@ -537,13 +580,10 @@ public class MapImageGeneration
                                         output[testCoord] = new Color32(0, 0, 0, (byte)(alpha2));   //Gets full alpha
                                         break;
                                     }
-
                                 }
                             }
-
                         }
                     }
-
                 }
             }
         });

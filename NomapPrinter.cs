@@ -88,9 +88,9 @@ namespace NomapPrinter
 
         private static Color32[] m_mapTexture;
         private static Color32[] m_forestTexture;
-        private static Color32[] m_heightmap;
+        private static Color[]   m_heightmap;
         private static Color32[] m_fogmap;
-        private static int[] heightBytes;
+        //private static int[]     heightBytes;
 
         MapGeneration maker;
         private static NomapPrinter instance;
@@ -862,9 +862,9 @@ namespace NomapPrinter
                 int num = m_textureSize / 2;
                 float num2 = m_pixelSize / 2f;
 
-                Color32[] array = new Color32[m_textureSize * m_textureSize];
+                Color32[] array  = new Color32[m_textureSize * m_textureSize];
                 Color32[] array2 = new Color32[m_textureSize * m_textureSize];
-                Color32[] array3 = new Color32[m_textureSize * m_textureSize];
+                Color[]   array3 = new Color[m_textureSize * m_textureSize];
                 Color32[] array4 = new Color32[m_textureSize * m_textureSize];
                 //heightBytes = new int[m_textureSize * m_textureSize];
 
@@ -928,7 +928,6 @@ namespace NomapPrinter
                 m_forestTexture = array2;
                 m_heightmap = array3;
                 m_fogmap = array4;
-
             }
 
             private static void SaveMapTexture(string path, MapType mapType, Color32[] map)
@@ -1045,8 +1044,13 @@ namespace NomapPrinter
                     case Heightmap.Biome.Plains:
                         return !(WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy)) < 0.8f) ? noForest : forest;
                     case Heightmap.Biome.BlackForest:
+                        return noForest;
                     case Heightmap.Biome.Mistlands:
-                        return forest;
+                        {
+                            return noForest;
+                            //float forestFactor = WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy));
+                            //return new Color(0f, 1f - Utils.SmoothStep(1.1f, 1.3f, forestFactor), 0f, 0f);
+                        }
                     default:
                         return noForest;
                 }
