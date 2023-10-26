@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.0.10";
+        const string pluginVersion = "1.0.11";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -352,7 +352,7 @@ namespace NomapPrinter
             showMyPins = config("Pins", "Show only my pins", true, "Only show your pins on the map");
             showNonCheckedPins = config("Pins", "Show only unchecked pins", true, "Only show pins that doesn't checked (have no red cross)");
 
-            showEveryPin = config("Pins list", "Show all pins", true, "Show all pins");
+            showEveryPin = config("Pins list", "Show all pins", false, "Show all pins");
             showPinStart = config("Pins list", "Show Start pins", true, "Show Start pin on drawed map");
             showPinTrader = config("Pins list", "Show Haldor pins", true, "Show Haldor pin on drawed map");
             showPinHildir = config("Pins list", "Show Hildir pins", true, "Show Hildir pin on drawed map");

@@ -60,6 +60,9 @@ https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationMa
 
 ## Changelog
 
+v 1.0.11
+* show all pins is disabled by default to prevent default death pins from showing
+
 v 1.0.10
 * fix for pins without texture
 
