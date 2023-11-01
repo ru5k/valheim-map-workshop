@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.0.12";
+        const string pluginVersion = "1.0.13";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -337,7 +337,7 @@ namespace NomapPrinter
             loggingEnabled = config("Logging", "Enabled", false, "Enable logging. [Not Synced with Server]", false);
 
             saveMapToFile = config("Map", "Save to file", false, "Save map to file. [Not Synced with Server]", false);
-            storeMapInLocalFile = config("Map", "Store map in local file", "", "Save and load map from local file instead of character save file. Have less priority than \"Load map from file\" option. [Not Synced with Server]", false);
+            storeMapInLocalFile = config("Map", "Store map in local folder", "", "Save and load map from local folder instead of character save file. Have less priority than \"Load map from file\" option.");
             showMapIngame = config("Map", "Show map", true, "Show map at ingame window. [Not Synced with Server]", false);
             filePath = config("Map", "Save to file path", "", "File path used to save generated map. [Not Synced with Server]", false);
             showInRadius = config("Map", "Show map when the table near", defaultValue: 0f, "Distance to nearest map table for map to be shown if set");
@@ -490,14 +490,34 @@ namespace NomapPrinter
             return true;
         }
 
-        private static bool LoadMapFromLocalFile()
+        private static string LocalFileName(Player player)
+        {
+            string filename = $"shudnal.NomapPrinter.{player.GetPlayerName()}.{game_world.m_name}.png";
+            if (IsFullPath(storeMapInLocalFile.Value))
+                filename = Path.Combine(storeMapInLocalFile.Value, filename);
+            else
+                filename = Path.Combine(Utils.GetSaveDataPath(FileHelpers.FileSource.Local), storeMapInLocalFile.Value, filename);
+
+            return filename;
+        }
+
+        private static bool LoadMapFromLocalFile(Player player)
         {
             if (storeMapInLocalFile.Value.IsNullOrWhiteSpace())
                 return false;
 
+            string filename = LocalFileName(player);
+
+            if (!File.Exists(filename))
+            {
+                Log($"Can't find file ({filename})!");
+                return false;
+            }
+
             try
             {
-                mapTexture.LoadImage(File.ReadAllBytes(storeMapInLocalFile.Value));
+                Log($"Loading nomap data from {filename}");
+                mapTexture.LoadImage(File.ReadAllBytes(filename));
                 mapTexture.Apply();
             }
             catch (Exception ex)
@@ -509,20 +529,37 @@ namespace NomapPrinter
             return true;
         }
 
-        private static void SaveMapToLocalFile()
+        private static void SaveMapToLocalFile(Player player)
         {
             if (storeMapInLocalFile.Value.IsNullOrWhiteSpace())
                 return;
 
+            string filename = LocalFileName(player);
+
             try
             {
-                Log($"Writing {storeMapInLocalFile.Value}");
-                File.WriteAllBytes(storeMapInLocalFile.Value, ImageConversion.EncodeToPNG(mapTexture));
+                Log($"Saving nomap data to {filename}");
+                File.WriteAllBytes(filename, ImageConversion.EncodeToPNG(mapTexture));
             }
             catch (Exception ex)
             {
                 Log($"Saving map to local file error:\n{ex}");
             }
+        }
+
+        public static bool IsFullPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || path.IndexOfAny(Path.GetInvalidPathChars()) != -1 || !Path.IsPathRooted(path))
+                return false;
+
+            string pathRoot = Path.GetPathRoot(path);
+            if (pathRoot.Length <= 2 && pathRoot != "/") // Accepts X:\ and \\UNC\PATH, rejects empty string, \ and X:, but accepts / to support Linux
+                return false;
+
+            if (pathRoot[0] != '\\' || pathRoot[1] != '\\')
+                return true; // Rooted and not a UNC path
+
+            return pathRoot.Trim('\\').IndexOf('\\') != -1; // A UNC server name without a share name (e.g "\\NAME" or "\\NAME\") is invalid
         }
 
         private static void ShowMessage(string text, MessageHud.MessageType type = MessageHud.MessageType.Center)
@@ -575,7 +612,7 @@ namespace NomapPrinter
             if (player != Player.m_localPlayer)
                 return false;
 
-            if (!storeMapInLocalFile.Value.IsNullOrWhiteSpace() && LoadMapFromLocalFile())
+            if (!storeMapInLocalFile.Value.IsNullOrWhiteSpace() && LoadMapFromLocalFile(player))
                 return true;
 
             if (!LoadValue(player, saveFieldKey, out string texBase64))
@@ -640,7 +677,7 @@ namespace NomapPrinter
 
             if (!storeMapInLocalFile.Value.IsNullOrWhiteSpace())
             {
-                SaveMapToLocalFile();
+                SaveMapToLocalFile(player);
             }
         }
 

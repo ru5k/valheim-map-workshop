@@ -58,6 +58,9 @@ https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationMa
 
 ## Changelog
 
+v 1.0.13
+* proper implementation for option to save map data in local file instead of character save file
+
 v 1.0.12
 * option to allow opening interactive map on record discoveries
 * option to save map data in local file instead of character save file
