@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.0.11";
+        const string pluginVersion = "1.0.12";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -36,6 +36,8 @@ namespace NomapPrinter
         private static ConfigEntry<string> filePath;
         private static ConfigEntry<string> loadMapFromFile;
         private static ConfigEntry<bool> showMapIngame;
+        private static ConfigEntry<bool> allowInteractiveMapOnWrite;
+        private static ConfigEntry<string> storeMapInLocalFile;
 
         private static ConfigEntry<MapType> mapType;
         private static ConfigEntry<float> mapDefaultScale;
@@ -335,12 +337,14 @@ namespace NomapPrinter
             loggingEnabled = config("Logging", "Enabled", false, "Enable logging. [Not Synced with Server]", false);
 
             saveMapToFile = config("Map", "Save to file", false, "Save map to file. [Not Synced with Server]", false);
+            storeMapInLocalFile = config("Map", "Store map in local file", "", "Save and load map from local file instead of character save file. Have less priority than \"Load map from file\" option. [Not Synced with Server]", false);
             showMapIngame = config("Map", "Show map", true, "Show map at ingame window. [Not Synced with Server]", false);
             filePath = config("Map", "Save to file path", "", "File path used to save generated map. [Not Synced with Server]", false);
             showInRadius = config("Map", "Show map when the table near", defaultValue: 0f, "Distance to nearest map table for map to be shown if set");
             mapDefaultScale = config("Map", "Map zoom default scale", 0.7f, "Default scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
             mapMinimumScale = config("Map", "Map zoom minimum scale", 0.25f, "Minimum scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
             mapMaximumScale = config("Map", "Map zoom maximum scale", 1.0f, "Maximum scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
+            allowInteractiveMapOnWrite = config("Map", "Show interactive map on record discoveries", false, "Show interactive original map on record discoveries part of map table used");
 
             mapType = config("Map", "Map type", MapType.Chart, "Type of showed map. [Not Synced with Server]", false);
             doubleTheSize = config("Map", "Map size 8k", false, "Doubles the map resolution. [Not Synced with Server]", false);
@@ -457,6 +461,7 @@ namespace NomapPrinter
 
             mapDataFromFile.AssignLocalValue(fileData);
         }
+
         private static void LoadMapFromSharedValue()
         {
             if (LoadMapFromFileData())
@@ -483,6 +488,41 @@ namespace NomapPrinter
             }
 
             return true;
+        }
+
+        private static bool LoadMapFromLocalFile()
+        {
+            if (storeMapInLocalFile.Value.IsNullOrWhiteSpace())
+                return false;
+
+            try
+            {
+                mapTexture.LoadImage(File.ReadAllBytes(storeMapInLocalFile.Value));
+                mapTexture.Apply();
+            }
+            catch (Exception ex)
+            {
+                Log($"Loading map error. Invalid printed map texture: {ex}");
+                return false;
+            }
+
+            return true;
+        }
+
+        private static void SaveMapToLocalFile()
+        {
+            if (storeMapInLocalFile.Value.IsNullOrWhiteSpace())
+                return;
+
+            try
+            {
+                Log($"Writing {storeMapInLocalFile.Value}");
+                File.WriteAllBytes(storeMapInLocalFile.Value, ImageConversion.EncodeToPNG(mapTexture));
+            }
+            catch (Exception ex)
+            {
+                Log($"Saving map to local file error:\n{ex}");
+            }
         }
 
         private static void ShowMessage(string text, MessageHud.MessageType type = MessageHud.MessageType.Center)
@@ -535,6 +575,9 @@ namespace NomapPrinter
             if (player != Player.m_localPlayer)
                 return false;
 
+            if (!storeMapInLocalFile.Value.IsNullOrWhiteSpace() && LoadMapFromLocalFile())
+                return true;
+
             if (!LoadValue(player, saveFieldKey, out string texBase64))
                 return false;
 
@@ -578,7 +621,7 @@ namespace NomapPrinter
             if (player != Player.m_localPlayer)
                 return;
 
-            if (mapTextureIsReady && loadMapFromFile.Value.IsNullOrWhiteSpace())
+            if (mapTextureIsReady && loadMapFromFile.Value.IsNullOrWhiteSpace() && storeMapInLocalFile.Value.IsNullOrWhiteSpace())
             {
                 try
                 {
@@ -593,6 +636,11 @@ namespace NomapPrinter
             else
             {
                 DeleteMapFromPlayer(player);
+            }
+
+            if (!storeMapInLocalFile.Value.IsNullOrWhiteSpace())
+            {
+                SaveMapToLocalFile();
             }
         }
 
@@ -747,6 +795,31 @@ namespace NomapPrinter
             }
         }
 
+        [HarmonyPatch(typeof(MapTable), nameof(MapTable.OnWrite))]
+        [HarmonyPriority(Priority.Last)]
+        public static class MapTable_OnWrite_Patch
+        {
+            static void Postfix()
+            {
+                if (!modEnabled.Value)
+                    return;
+
+                if (!Game.m_noMap)
+                    return;
+
+                instance.ConfigUpdate();
+
+                if (!allowInteractiveMapOnWrite.Value)
+                    return;
+
+                Game.m_noMap = false;
+
+                Minimap.instance.SetMapMode(Minimap.MapMode.Large);
+
+                Game.m_noMap = true;
+            }
+        }
+
         private class MapGeneration : MonoBehaviour
         {
             public bool working = false;
@@ -873,8 +946,6 @@ namespace NomapPrinter
 
             private static void SaveMapTexture(string path, MapType mapType, Color32[] map)
             {
-                string filename = Path.Combine(path, $"{mapType} map of {game_world.m_name}.png");
-
                 // File size increase is not so much, better overall details, required for viewable icons 16x16, required for ingame map
                 // If someone will be asking for smaller resolution just make this line optional via config
                 DoubleMapSize(ref map, out int mapSize);
@@ -900,6 +971,8 @@ namespace NomapPrinter
 
                 if (saveToFile)
                 {
+                    string filename = Path.Combine(path, $"{mapType} map of {game_world.m_name}.png");
+                    
                     Log($"Writing {filename}");
                     File.WriteAllBytes(filename, ImageConversion.EncodeToPNG(mapTexture));
                     ShowMessage($"{messageSavedTo.Value} {path}", MessageHud.MessageType.TopLeft);
