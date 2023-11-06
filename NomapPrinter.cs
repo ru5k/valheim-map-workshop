@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.0.13";
+        const string pluginVersion = "1.0.14";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -535,6 +535,8 @@ namespace NomapPrinter
                 return;
 
             string filename = LocalFileName(player);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(filename));
 
             try
             {

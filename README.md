@@ -60,6 +60,9 @@ https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationMa
 
 ## Changelog
 
+v 1.0.14
+* fix for nonexistent folder for "Store map in local folder" options
+
 v 1.0.13
 * proper implementation for option to save map data in local file instead of character save file
 
