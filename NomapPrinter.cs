@@ -35,6 +35,8 @@ namespace NomapPrinter
 
         private static ConfigEntry<MapWindow> mapWindow;
         private static ConfigEntry<bool> allowInteractiveMapOnWrite;
+        private static ConfigEntry<bool> showSharedMap;
+
         private static ConfigEntry<float> showNearTheTableDistance;
         private static ConfigEntry<int> showMapBasePiecesRequirement;
         private static ConfigEntry<int> showMapComfortRequirement;
@@ -50,7 +52,7 @@ namespace NomapPrinter
         private static ConfigEntry<float> mapMaximumScale;
 
         private static ConfigEntry<int> heightmapFactor;
-        private static ConfigEntry<int> graduationLineHeightDifference;
+        private static ConfigEntry<int> graduationLinesDensity;
 
         private static ConfigEntry<bool> showPins;
         private static ConfigEntry<bool> showExploredPins;
@@ -104,7 +106,6 @@ namespace NomapPrinter
         public static GameObject parentObject;
         public static GameObject mapContent;
         public static RectTransform content;
-        private static float mapCurrentScale = 0.7f;
 
         public static Texture2D mapTexture = new Texture2D(4096, 4096);
 
@@ -236,7 +237,7 @@ namespace NomapPrinter
             }
 
             if (DisplayingWindow && ZInput.GetKeyDown(KeyCode.Escape))
-                DisplayingWindow = false;
+                DisplayingWindow = false; 
 
             if (DisplayingWindow)
             {
@@ -254,22 +255,27 @@ namespace NomapPrinter
 
         private static void ZoomMap(float increment)
         {
+            float scaleIncrement = increment / 2;
+            if (scaleIncrement == 0)
+                scaleIncrement = mapDefaultScale.Value - content.localScale.x;
+
             int factor = mapSize.Value == MapSize.Small ? 1 : 2;
-
-            mapCurrentScale = (increment == 0f) ? mapDefaultScale.Value : mapCurrentScale + increment / 2;
-
+            
             float minScale = Mathf.Max(mapMinimumScale.Value, 0.1f) * 2 / factor;
             float maxScale = Mathf.Min(mapMaximumScale.Value, 2f) * factor;
 
-            if (mapCurrentScale >= maxScale)
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(content, Input.mousePosition, null, out Vector2 relativeMousePosition);
+            
+            Vector3 _scale = new Vector3(content.localScale.x, content.localScale.y, content.localScale.z);
+
+            float scale = Mathf.Clamp(_scale.x + scaleIncrement, minScale, maxScale);
+            _scale.Set(scale, scale, 0f);
+
+            if (content.localScale.x != _scale.x)
             {
-                mapCurrentScale = maxScale;
+                content.localScale = _scale;
+                content.anchoredPosition -= (relativeMousePosition * scaleIncrement);
             }
-            else if (mapCurrentScale <= minScale)
-            {
-                mapCurrentScale = minScale;
-            }
-            content.localScale = new Vector2(mapCurrentScale, mapCurrentScale);
         }
 
         private static void CenterMap()
@@ -301,6 +307,9 @@ namespace NomapPrinter
             {
                 if (mapWindow.Value == MapWindow.Hide || mapWindow.Value == MapWindow.ShowOnInteraction)
                     return false;
+
+                if (DisplayingWindow)
+                    return true;
 
                 Player localPlayer = Player.m_localPlayer;
 
@@ -388,10 +397,11 @@ namespace NomapPrinter
 
             mapWindow = config("Map", "Ingame map", MapWindow.ShowEverywhere, "Where to show ingame map");
             allowInteractiveMapOnWrite = config("Map", "Show interactive map on record discoveries", false, "Show interactive original game map on record discoveries part of map table used");
+            showSharedMap = config("Map", "Show shared map", true, "Show parts of the map shared by others");
 
-            showNearTheTableDistance = config("Map", "Show map near the table when distance is less than", defaultValue: 0f, "Distance to nearest map table for map to be shown");
-            showMapBasePiecesRequirement = config("Map", "Show map when base pieces near the player is more than", defaultValue: 0, "Count of base pieces surrounding the player should be more than that for map to be shown");
-            showMapComfortRequirement = config("Map", "Show map when player comfort is more than", defaultValue: 0, "Player comfort buff should be more than that for map to be shown");
+            showNearTheTableDistance = config("Map restrictions", "Show map near the table when distance is less than", defaultValue: 10f, "Distance to nearest map table for map to be shown");
+            showMapBasePiecesRequirement = config("Map restrictions", "Show map when base pieces near the player is more than", defaultValue: 0, "Count of base pieces surrounding the player should be more than that for map to be shown");
+            showMapComfortRequirement = config("Map restrictions", "Show map when player comfort is more than", defaultValue: 0, "Player comfort buff should be more than that for map to be shown");
 
             saveMapToFile = config("Map save", "Save to file", false, "Save generated map to file. Works in normal map mode. You can set exact file name or folder name [Not Synced with Server]", false);
             filePath = config("Map save", "Save to file path", "", "File path used to save generated map. [Not Synced with Server]", false);
@@ -406,16 +416,16 @@ namespace NomapPrinter
             mapMinimumScale = config("Map style", "Map zoom minimum scale", 0.25f, "Minimum scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
             mapMaximumScale = config("Map style", "Map zoom maximum scale", 1.0f, "Maximum scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
 
-            heightmapFactor = config("Map style extended", "Heightmap factor", 8, "[Not Synced with Server]", false);
-            graduationLineHeightDifference = config("Map style extended", "Graduation line height difference", 8, "[Not Synced with Server]", false);
+            heightmapFactor = config("Map style extended", "Heightmap factor", 8, "Heightmap details factor [Not Synced with Server]", false);
+            graduationLinesDensity = config("Map style extended", "Graduation line density", 8, "Graduation lines density [Not Synced with Server]", false);
 
             messageStart = config("Messages", "Drawing begin", "Remembering travels...", "Center message when drawing is started. [Not Synced with Server]", false);
             messageSaving = config("Messages", "Drawing end", "Drawing map...", "Center message when saving file is started. [Not Synced with Server]", false);
             messageReady = config("Messages", "Saved", "Map is ready", "Center message when file is saved. [Not Synced with Server]", false);
             messageSavedTo = config("Messages", "Saved to", "Map saved to", "Top left message with file name. [Not Synced with Server]", false);
-            messageNotReady = config("Messages", "Not ready", "Map is not drawn yet", "Top left message on trying to open a not ready map. [Not Synced with Server]", false);
-            messageNotEnoughBasePieces = config("Messages", "Not enough base pieces", "Not enough base pieces ({0} of {1})", "Top left message on trying to open a map with failed base pieces requirement check. [Not Synced with Server]", false);
-            messageNotEnoughComfort = config("Messages", "Not enough comfort", "Not enough comfort ({0} of {1})", "Top left message on trying to open a map with failed comfort requirement check. [Not Synced with Server]", false);
+            messageNotReady = config("Messages", "Not ready", "Map is not drawn yet", "Center message on trying to open a not ready map. [Not Synced with Server]", false);
+            messageNotEnoughBasePieces = config("Messages", "Not enough base pieces", "Not enough base pieces ({0} of {1})", "Center message on trying to open a map with failed base pieces requirement check. [Not Synced with Server]", false);
+            messageNotEnoughComfort = config("Messages", "Not enough comfort", "Not enough comfort ({0} of {1})", "Center message on trying to open a map with failed comfort requirement check. [Not Synced with Server]", false);
 
             showPins = config("Pins", "Show map pins", true, "Show pins on drawed map");
             showExploredPins = config("Pins", "Show only explored pins", true, "Only show pins on explored part of the map");
@@ -438,7 +448,8 @@ namespace NomapPrinter
             showPinDeath = config("Pins list", "Show Death pins", false, "Show Death pins on drawed map");
             showPinEpicLoot = config("Pins list", "Show Epic Loot pins", true, "Show Epic Loot pins on drawed map");
 
-            tablePartsSwap = config("Table", "Swap interaction behaviour on map table parts", false, "Make \"Read map\" part to open interactive map and \"Record discoveries\" part to generate map. [Not Synced with Server]", false);
+            tablePartsSwap = config("Table", "Swap interaction behaviour on map table parts", false, "Make \"Read map\" part to open interactive map and \"Record discoveries\" part to generate map. +" +
+                                                                                                     "\nDoesn't work in Show On Interaction map mode [Not Synced with Server]", false);
 
             localPath = Utils.GetSaveDataPath(FileHelpers.FileSource.Local);
 
@@ -554,13 +565,7 @@ namespace NomapPrinter
 
         private static string LocalFileName(Player player)
         {
-            string filename = $"shudnal.NomapPrinter.{player.GetPlayerName()}.{game_world.m_name}.png";
-            if (IsFullPath(localFolder.Value))
-                filename = Path.Combine(localFolder.Value, filename);
-            else
-                filename = Path.Combine(localPath, localFolder.Value, filename);
-
-            return filename;
+            return Path.Combine(localPath, localFolder.Value, $"shudnal.NomapPrinter.{player.GetPlayerName()}.{game_world.m_name}.png");
         }
 
         private static bool LoadMapFromLocalFile(Player player)
@@ -609,21 +614,6 @@ namespace NomapPrinter
             {
                 Log($"Saving map to local file error:\n{ex}");
             }
-        }
-
-        public static bool IsFullPath(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path) || path.IndexOfAny(Path.GetInvalidPathChars()) != -1 || !Path.IsPathRooted(path))
-                return false;
-
-            string pathRoot = Path.GetPathRoot(path);
-            if (pathRoot.Length <= 2 && pathRoot != "/") // Accepts X:\ and \\UNC\PATH, rejects empty string, \ and X:, but accepts / to support Linux
-                return false;
-
-            if (pathRoot[0] != '\\' || pathRoot[1] != '\\')
-                return true; // Rooted and not a UNC path
-
-            return pathRoot.Trim('\\').IndexOf('\\') != -1; // A UNC server name without a share name (e.g "\\NAME" or "\\NAME\") is invalid
         }
 
         private static void ShowMessage(string text, MessageHud.MessageType type = MessageHud.MessageType.Center)
@@ -808,6 +798,7 @@ namespace NomapPrinter
             mapImage.preserveAspect = true;
 
             // Scroll rect settings
+            svScrollRect.scrollSensitivity = 0;
             svScrollRect.content = content;
             svScrollRect.viewport = viewport;
             svScrollRect.horizontal = true;
@@ -949,6 +940,19 @@ namespace NomapPrinter
             }
         }
 
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.IsOpen))]
+        [HarmonyPriority(Priority.Last)]
+        public static class Minimap_IsOpen_Patch
+        {
+            static void Postfix(ref bool __result)
+            {
+                if (!modEnabled.Value)
+                    return;
+
+                __result = __result || instance.DisplayingWindow;
+            }
+        }
+
         private class MapGeneration : MonoBehaviour
         {
             public bool working = false;
@@ -979,13 +983,13 @@ namespace NomapPrinter
                         yield return imageGen.GenerateSatelliteImage();
                         break;
                     case MapType.Topographical:
-                        yield return imageGen.GenerateTopographicalMap(graduationLineHeightDifference.Value);
+                        yield return imageGen.GenerateTopographicalMap(graduationLinesDensity.Value);
                         break;
                     case MapType.Chart:
-                        yield return imageGen.GenerateChartMap(graduationLineHeightDifference.Value);
+                        yield return imageGen.GenerateChartMap(graduationLinesDensity.Value);
                         break;
                     case MapType.OldChart:
-                        yield return imageGen.GenerateOldMap(graduationLineHeightDifference.Value);
+                        yield return imageGen.GenerateOldMap(graduationLinesDensity.Value);
                         break;
                     default:
                         goto case MapType.Chart;
@@ -1055,26 +1059,15 @@ namespace NomapPrinter
 
                 bool[] mapData = new bool[textureSize * textureSize];
 
-                Texture2D fogTexture = (Texture2D)Minimap.instance.m_mapImageLarge.material.GetTexture("_FogTex");
-
                 var internalThread = new Thread(() =>
                 {
                     for (int i = 0; i < textureSize; i++)
                     {
-                        float wy = (i - num) * m_pixelSize + num2;
-
                         for (int j = 0; j < textureSize; j++)
                         {
-                            float wx = (j - num) * m_pixelSize + num2;
-
                             int pos = i * textureSize + j;
 
-                            //Exploration Data
-
-                            //
-                            //exploration[pos] = Minimap.instance.IsExplored(Minimap.instance.MapPointToWorld(j / mapSizeFactor, i / mapSizeFactor));
-                            Color explorationPos = fogTexture.GetPixel(j / mapSizeFactor, i / mapSizeFactor);
-                            exploration[pos] = !(explorationPos.r != 0f && explorationPos.g != 0f);
+                            exploration[pos] = IsExplored(j / mapSizeFactor, i / mapSizeFactor);
 
                             if (!exploration[pos])
                                 continue;
@@ -1082,12 +1075,8 @@ namespace NomapPrinter
                             // Get map data in a small radius
                             for (int di = -2 * mapSizeFactor; di <= 2 * mapSizeFactor; di++)
                                 for (int dj = -2 * mapSizeFactor; dj <= 2 * mapSizeFactor; dj++)
-                                {
-                                    if ((i + di < 0) || (j + dj < 0) || (i + di > textureSize) || (j + dj > textureSize))
-                                        continue;
-
-                                    mapData[(i + di) * textureSize + j + dj] = true;
-                                }
+                                    if ((i + di >= 0) && (j + dj >= 0) && (i + di < textureSize) && (j + dj < textureSize))
+                                        mapData[(i + di) * textureSize + j + dj] = true;
                         }
                     }
 
@@ -1120,7 +1109,7 @@ namespace NomapPrinter
                             if (height > 0)
                                 heightmap[pos] = new Color(height / Mathf.Pow(2, heightmapFactor.Value + 1), 0f, 0f);
                             else
-                                heightmap[pos] = new Color(0f, 0f, height / -Mathf.Pow(2, heightmapFactor.Value));
+                                heightmap[pos] = new Color(0f, 0f, height / -Mathf.Pow(2, heightmapFactor.Value + (biome == Heightmap.Biome.Swamp ? 1 : 0)));
 
                             //Biome data
                             biomeColor[pos] = GetPixelColor(biome, biomeHeight);
@@ -1144,10 +1133,6 @@ namespace NomapPrinter
 
             private static void ApplyMapTexture(MapType mapType, Color32[] map)
             {
-                // File size increase is not so much, better overall details, required for viewable icons 16x16, required for ingame map
-               // int mapResolution = (int)Math.Sqrt(map.Length);
-
-                //if (mapSize.Value != MapSize.Smooth)
                 DoubleMapSize(ref map, out int mapResolution);
 
                 if (mapSize.Value == MapSize.Normal) 
@@ -1165,7 +1150,6 @@ namespace NomapPrinter
                 ResetViewerContentSize();
 
                 mapTextureIsReady = true;
-
             }
 
             private static void DoubleMapSize(ref Color32[] map, out int mapSize)
@@ -1205,7 +1189,6 @@ namespace NomapPrinter
                         return Minimap.instance.m_blackforestColor;
                     case Heightmap.Biome.DeepNorth:
                         return new Color(0.85f, 0.85f, 1f);  // Blueish color
-                        //return Minimap.instance.m_deepnorthColor;
                     case Heightmap.Biome.Plains:
                         return Minimap.instance.m_heathColor;
                     case Heightmap.Biome.Swamp:
@@ -1214,7 +1197,6 @@ namespace NomapPrinter
                         return Minimap.instance.m_mountainColor;
                     case Heightmap.Biome.Mistlands:
                         return new Color(0.2f, 0.2f, 0.25f);
-                        //return Minimap.instance.m_mistlandsColor;
                     case Heightmap.Biome.Ocean:
                         return Color.blue;
                     default:
@@ -1238,7 +1220,7 @@ namespace NomapPrinter
                     case Heightmap.Biome.Plains:
                         return !(WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy)) < 0.8f) ? noForest : forest;
                     case Heightmap.Biome.BlackForest:
-                        return blackforest;
+                        return mapType.Value == MapType.OldChart ? forest : blackforest;
                     case Heightmap.Biome.Mistlands:
                         {
                             float forestFactor = WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy));
@@ -1291,6 +1273,12 @@ namespace NomapPrinter
                 }
             }
 
+            private static bool IsExplored(int x, int y)
+            {
+                Color explorationPos = Minimap.instance.m_fogTexture.GetPixel(x, y);
+                return explorationPos.r == 0f || showSharedMap.Value && explorationPos.g == 0f;
+            }
+
             private static void GetPinsToPrint()
             {
                 pinsToPrint.Clear();
@@ -1303,17 +1291,23 @@ namespace NomapPrinter
 
                 foreach (Minimap.PinData pin in Minimap.instance.m_pins)
                 {
-                    if (!showEveryPin.Value)
+                    if (pin.m_icon.name != "mapicon_start")
                     {
-                        if (showNonCheckedPins.Value && pin.m_checked)
-                            continue;
-
-                        if (showMyPins.Value && pin.m_ownerID != 0L)
-                            continue;
-
-                        if (showExploredPins.Value && !Minimap.instance.IsExplored(pin.m_pos))
-                            if (!IsMerchantPin(pin.m_icon.name) || !showMerchantPins.Value)
+                        if (!showEveryPin.Value)
+                        {
+                            if (showNonCheckedPins.Value && pin.m_checked)
                                 continue;
+
+                            if (showMyPins.Value && pin.m_ownerID != 0L)
+                                continue;
+
+                            if (showExploredPins.Value)
+                            {
+                                Minimap.instance.WorldToPixel(pin.m_pos, out int px, out int py);
+                                if (!IsExplored(px, py) && (!IsMerchantPin(pin.m_icon.name) || !showMerchantPins.Value))
+                                    continue;
+                            }
+                        }
                     }
 
                     if (IsShowablePinIcon(pin))

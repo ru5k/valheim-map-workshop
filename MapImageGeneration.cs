@@ -13,8 +13,6 @@ public class MapImageGeneration
     private static int m_textureSize;
     private static int mapSizeFactor;
 
-    private static readonly float forestColorFactor = 0.90f;
-
     private Color32[] result;
     public Color32[] output;
 
@@ -46,7 +44,7 @@ public class MapImageGeneration
     {
         output = null;
 
-        yield return GenerateOceanTexture(m_heightmap, m_mapTexture);
+        yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.25f);
         Color32[] oceanTexture = result;
 
         yield return ReplaceColour32(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
@@ -67,7 +65,7 @@ public class MapImageGeneration
         yield return AddPerlinNoise(outtex, 128, 16);
         outtex = result;
 
-        yield return ApplyForestMaskTexture(outtex, m_forestTexture);
+        yield return ApplyForestMaskTexture(outtex, m_forestTexture, 0.95f);
         outtex = result;
 
         yield return GenerateContourMap(m_heightmap, graduationHeight, 128);
@@ -79,7 +77,7 @@ public class MapImageGeneration
         yield return StylizeFog(m_exploration);
         Color32[] fog = result;
 
-        yield return OverlayTexture(outtex, fog);
+        yield return OverlayTexture(outtex, fog, true);
         outtex = result;
 
         output = outtex;
@@ -89,7 +87,7 @@ public class MapImageGeneration
     {
         output = null;
 
-        yield return GenerateOceanTexture(m_heightmap, m_mapTexture);
+        yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.15f);
         Color32[] oceanTexture = result;
 
         yield return ReplaceColour32(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
@@ -119,7 +117,7 @@ public class MapImageGeneration
         yield return StylizeFog(m_exploration);
         Color32[] fog = result;
 
-        yield return OverlayTexture(outtex, fog);
+        yield return OverlayTexture(outtex, fog, true);
         outtex = result;
 
         output = outtex;
@@ -159,7 +157,7 @@ public class MapImageGeneration
         yield return StylizeFog(m_exploration);
         Color32[] fog = result;
 
-        yield return OverlayTexture(outtex, fog);
+        yield return OverlayTexture(outtex, fog, true);
         outtex = result;
 
         output = outtex;
@@ -205,7 +203,7 @@ public class MapImageGeneration
         output = outtex;
     }
 
-    private IEnumerator OverlayTexture(Color32[] array1, Color32[] array2, bool ignoreFog = false) //Tex2 on Tex1
+    private IEnumerator OverlayTexture(Color32[] array1, Color32[] array2, bool allMap = false) //Tex2 on Tex1
     {
         Color32[] output = new Color32[m_textureSize * m_textureSize];
         Color workingColor;
@@ -214,7 +212,7 @@ public class MapImageGeneration
         {
             for (int i = 0; i < (m_textureSize * m_textureSize); i++)
             {
-                if (!ignoreFog && !m_mapData[i])
+                if (!allMap && !m_mapData[i])
                     continue;
 
                 float a = ((Color)array2[i]).a;
@@ -407,7 +405,7 @@ public class MapImageGeneration
         result = output;
     }
 
-    private IEnumerator GenerateOceanTexture(Color32[] input, Color32[] biomeColor)
+    private IEnumerator GenerateOceanTexture(Color32[] input, Color32[] biomeColor, float oceanLerpTarget = 0.1f)
     {
         Color32[] output = new Color32[input.Length];
 
@@ -445,7 +443,7 @@ public class MapImageGeneration
                 output[i].a = (byte)Math.Min((input[i].b * 16) + 128, 255);
 
                 if (biomeColor[i] == Color.blue)
-                    output[i] = Color32.Lerp(output[i], m_oceanColor, 0.1f);
+                    output[i] = Color32.Lerp(output[i], m_oceanColor, oceanLerpTarget);
             }
         });
 
@@ -644,9 +642,8 @@ public class MapImageGeneration
             for (int i = 0; i < input.Length; i++)
             {
                 if (!m_mapData[i])
-                    continue;
-
-                if ((input[i].r == from.r) && (input[i].g == from.g) && (input[i].b == from.b)) 
+                    output[i] = to;
+                else if((input[i].r == from.r) && (input[i].g == from.g) && (input[i].b == from.b)) 
                     output[i] = to;
                 else
                     output[i] = input[i];
@@ -661,7 +658,7 @@ public class MapImageGeneration
         result = output;
     }
 
-    private IEnumerator ApplyForestMaskTexture(Color32[] array, Color32[] forestMask)
+    private IEnumerator ApplyForestMaskTexture(Color32[] array, Color32[] forestMask, float forestColorFactor = 0.9f)
     {
         Color32[] output = new Color32[m_textureSize * m_textureSize];
 

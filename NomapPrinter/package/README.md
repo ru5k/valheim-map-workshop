@@ -58,6 +58,17 @@ https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationMa
 
 ## Changelog
 
+v 1.1.0
+* greatly reduced time of map forming for partial explored maps
+* added forests and oceans
+* map options revamped
+* added new Smooth level of map details
+* UX improvements
+* option to swap map table sections
+* more map restrictions
+* strict way to set map storage
+* option to disable shared map
+
 v 1.0.14
 * fix for nonexistent folder for "Store map in local folder" options
 
