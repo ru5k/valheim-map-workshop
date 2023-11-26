@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.1.1";
+        const string pluginVersion = "1.1.2";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -53,6 +53,8 @@ namespace NomapPrinter
 
         private static ConfigEntry<int> heightmapFactor;
         private static ConfigEntry<int> graduationLinesDensity;
+        private static ConfigEntry<float> pinScale;
+        private static ConfigEntry<bool> preserveSharedMapFog;
 
         private static ConfigEntry<bool> showPins;
         private static ConfigEntry<bool> showExploredPins;
@@ -420,6 +422,8 @@ namespace NomapPrinter
 
             heightmapFactor = config("Map style extended", "Heightmap factor", 8, "Heightmap details factor [Not Synced with Server]", false);
             graduationLinesDensity = config("Map style extended", "Graduation line density", 8, "Graduation lines density [Not Synced with Server]", false);
+            pinScale = config("Map style extended", "Pin scale", 1.0f, "Pin scale [Not Synced with Server]", false);
+            preserveSharedMapFog = config("Map style extended", "Preserve shared map fog tint for vanilla map", true, "Generate Vanilla map with shared map fog tint [Not Synced with Server]", false);
 
             messageStart = config("Messages", "Drawing begin", "Remembering travels...", "Center message when drawing is started. [Not Synced with Server]", false);
             messageSaving = config("Messages", "Drawing end", "Drawing map...", "Center message when saving file is started. [Not Synced with Server]", false);
@@ -1176,7 +1180,7 @@ namespace NomapPrinter
                     noClouds.Apply(false);
                 }
 
-                Material material = Minimap.instance.m_mapImageLarge.material;
+                Material material = Minimap.instance.m_mapLargeShader;
 
                 // Disable clouds
                 Texture clouds = material.GetTexture("_CloudTex");
@@ -1184,16 +1188,23 @@ namespace NomapPrinter
 
                 // Replace shared map toggle
                 bool m_showSharedMapData = Minimap.instance.m_showSharedMapData;
-                float m_sharedMapDataFadeRate = Minimap.instance.m_sharedMapDataFadeRate;
                 bool replaceSharedMapToggle = showSharedMap.Value != Minimap.instance.m_showSharedMapData;
 
                 if (replaceSharedMapToggle)
-                {
-                    Minimap.instance.m_showSharedMapData = showSharedMap.Value;
-                    Minimap.instance.m_sharedMapDataFadeRate = 1000f;
+                    material.SetFloat("_SharedFade", showSharedMap.Value ? 1f : 0f);
 
-                    while (Minimap.instance.m_sharedMapDataFade != (showSharedMap.Value ? 1f : 0f))
-                        yield return new WaitForEndOfFrame();
+                // Combine fog for shared map
+                Color[] fogTex = Minimap.instance.m_fogTexture.GetPixels();
+                bool combineFog = !preserveSharedMapFog.Value && showSharedMap.Value;
+                if (combineFog)
+                {
+                    Color[] pixels = Minimap.instance.m_fogTexture.GetPixels();
+                    for (int i = 0; i < pixels.Length; i++)
+                        if (pixels[i].g == 0f && pixels[i].r != 0f)
+                            pixels[i].r = pixels[i].g;
+
+                    Minimap.instance.m_fogTexture.SetPixels(pixels);
+                    Minimap.instance.m_fogTexture.Apply();
                 }
 
                 GameObject mapPanelObject = InitMapPanel(material);
@@ -1215,7 +1226,21 @@ namespace NomapPrinter
                 camera.cullingMask = 1 << 19;
                 camera.Render();
 
+                EnvSetup env = EnvMan.instance.GetCurrentEnvironment();
+                float m_sunAngle = env.m_sunAngle;
+                float m_smoothDayFraction = EnvMan.instance.m_smoothDayFraction;
+                Vector3 m_dirLight = EnvMan.instance.m_dirLight.transform.forward;
+
+                EnvMan.instance.m_smoothDayFraction = 0.5f;
+                env.m_sunAngle = 60f;
+                EnvMan.instance.SetEnv(env, 1, 0, 0, 0, 0);
+                EnvMan.instance.m_dirLight.transform.forward = Vector3.down;
+
                 yield return new WaitForEndOfFrame();
+
+                EnvMan.instance.m_smoothDayFraction = 0.5f;
+                env.m_sunAngle = 60;
+                EnvMan.instance.SetEnv(env, 1, 0, 0, 0, Time.fixedDeltaTime);
 
                 RenderTexture.active = renderTexture;
 
@@ -1244,12 +1269,18 @@ namespace NomapPrinter
 
                 // Return clouds
                 material.SetTexture("_CloudTex", clouds);
+                EnvMan.instance.m_smoothDayFraction = m_smoothDayFraction;
+                env.m_sunAngle = m_sunAngle;
+                EnvMan.instance.m_dirLight.transform.forward = m_dirLight;
 
                 // Return shared map toggle
                 if (replaceSharedMapToggle)
+                    material.SetFloat("_SharedFade", m_showSharedMapData ? 1f : 0f);
+
+                if (combineFog)
                 {
-                    Minimap.instance.m_showSharedMapData = m_showSharedMapData;
-                    Minimap.instance.m_sharedMapDataFadeRate = m_sharedMapDataFadeRate;
+                    Minimap.instance.m_fogTexture.SetPixels(fogTex);
+                    Minimap.instance.m_fogTexture.Apply();
                 }
 
                 if (!wasOpen)
@@ -1698,6 +1729,8 @@ namespace NomapPrinter
                 int newSize = 32;
                 if (mapSize.Value == MapSize.Small)
                     newSize = 16;
+
+                newSize = Mathf.CeilToInt(newSize * pinScale.Value);
 
                 if (iconSize == newSize)
                     return;

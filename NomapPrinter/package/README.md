@@ -58,6 +58,14 @@ https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationMa
 
 ## Changelog
 
+v 1.1.2
+* adjustments for Vanilla map style
+* pin scale option
+
+v 1.1.1
+* Vanilla map style
+* mistlands color tweaks
+
 v 1.1.0
 * greatly reduced time of map forming for partial explored maps
 * added forests and oceans
