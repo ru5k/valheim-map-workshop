@@ -6,12 +6,15 @@ using UnityEngine;
 public class MapImageGeneration
 {
     private static Color32[] m_mapTexture;
-    private static Color32[] m_forestTexture;
+    private static Color[] m_forestTexture;
     private static Color32[] m_heightmap;
     private static bool[] m_exploration;
     private static bool[] m_mapData;
     private static int m_textureSize;
     private static int mapSizeFactor;
+
+    private static Color32[] space;
+    private static int spaceRes;
 
     private Color32[] result;
     public Color32[] output;
@@ -19,7 +22,7 @@ public class MapImageGeneration
     public static readonly Color32 yellowMap = new Color32(203, 155, 87, byte.MaxValue);
     public static readonly Color32 m_oceanColor = new Color32(20, 100, 255, byte.MaxValue);
 
-    public static void Initialize(Color32[] biomes, Color32[] forests, Color32[] height, bool[] exploration, int texture_size, bool[] mapData)
+    public static void Initialize(Color32[] biomes, Color[] forests, Color32[] height, bool[] exploration, int texture_size, bool[] mapData)
     {
         m_mapTexture = biomes;
         m_forestTexture = forests;
@@ -29,6 +32,30 @@ public class MapImageGeneration
         m_mapData = mapData;
 
         mapSizeFactor = m_textureSize / Minimap.instance.m_textureSize;
+
+        if (spaceRes == 0)
+        {
+            Texture spaceTex = Minimap.instance.m_mapImageLarge.material.GetTexture("_SpaceTex");
+
+            spaceRes = spaceTex.width;
+
+            RenderTexture tmp = RenderTexture.GetTemporary(spaceRes, spaceRes, 24);
+
+            Graphics.Blit(spaceTex, tmp);
+            RenderTexture previous = RenderTexture.active;
+            RenderTexture.active = tmp;
+
+            Texture2D tex = new Texture2D(spaceRes, spaceRes, TextureFormat.RGBA32, false, false);
+            tex.ReadPixels(new Rect(0, 0, spaceRes, spaceRes), 0, 0);
+            tex.Apply();
+
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(tmp);
+
+            space = tex.GetPixels32();
+
+            UnityEngine.Object.Destroy(tex);
+        }
     }
     
     public static void DeInitialize()
@@ -47,7 +74,7 @@ public class MapImageGeneration
         yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.25f);
         Color32[] oceanTexture = result;
 
-        yield return ReplaceColour32(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
+        yield return ReplaceAbyssWithColor(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
         Color32[] outtex = result;
 
         yield return OverlayTexture(outtex, oceanTexture);
@@ -90,7 +117,7 @@ public class MapImageGeneration
         yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.15f);
         Color32[] oceanTexture = result;
 
-        yield return ReplaceColour32(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
+        yield return ReplaceAbyssWithColor(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
         Color32[] outtex = result;
 
         yield return OverlayTexture(outtex, oceanTexture);
@@ -133,8 +160,11 @@ public class MapImageGeneration
         yield return AddPerlinNoise(oceanTexture, 4, 64);
         oceanTexture = result;
 
-        yield return OverlayTexture(m_mapTexture, oceanTexture);
+        yield return ReplaceAbyssWithSpace(m_mapTexture, new Color32(0, 0, 0, 255));    //Replace void with Space texture
         Color32[] outtex = result;
+
+        yield return OverlayTexture(outtex, oceanTexture);
+        outtex = result;
 
         yield return CreateShadowMap(m_heightmap, 23);
         Color32[] shadowmap = result;
@@ -173,8 +203,11 @@ public class MapImageGeneration
         yield return AddPerlinNoise(oceanTexture, 4, 64);
         oceanTexture = result;
 
-        yield return OverlayTexture(m_mapTexture, oceanTexture);
+        yield return ReplaceAbyssWithSpace(m_mapTexture, new Color32(0, 0, 0, 255));    //Replace void with Space texture
         Color32[] outtex = result;
+
+        yield return OverlayTexture(outtex, oceanTexture);
+        outtex = result;
 
         yield return CreateShadowMap(m_heightmap, 23);
         Color32[] shadowmap = result;
@@ -633,7 +666,7 @@ public class MapImageGeneration
         result = array;
     }
 
-    private IEnumerator ReplaceColour32(Color32[] input, Color32 from, Color32 to)
+    private IEnumerator ReplaceAbyssWithColor(Color32[] input, Color32 from, Color32 to)
     {
         Color32[] output = new Color32[input.Length];
 
@@ -658,7 +691,39 @@ public class MapImageGeneration
         result = output;
     }
 
-    private IEnumerator ApplyForestMaskTexture(Color32[] array, Color32[] forestMask, float forestColorFactor = 0.9f)
+    private IEnumerator ReplaceAbyssWithSpace(Color32[] input, Color32 from)
+    {
+        Color32[] output = new Color32[input.Length];
+
+        var internalThread = new Thread(() =>
+        {
+            for (int x = 0; x < m_textureSize; x++)
+            {
+                for (int y = 0; y < m_textureSize; y++)
+                {
+                    int pos = x * m_textureSize + y;
+
+                    if (!m_mapData[pos])
+                        output[pos] = space[x % spaceRes * spaceRes + y % spaceRes];
+                    else if ((input[pos].r == from.r) && (input[pos].g == from.g) && (input[pos].b == from.b))
+                    {
+                        output[pos] = space[x % spaceRes * spaceRes + y % spaceRes];
+                    }
+                    else
+                        output[pos] = input[pos];
+                }
+            }
+        });
+
+        internalThread.Start();
+        while (internalThread.IsAlive == true)
+        {
+            yield return null;
+        }
+        result = output;
+    }
+
+    private IEnumerator ApplyForestMaskTexture(Color32[] array, Color[] forestMask, float forestColorFactor = 0.9f)
     {
         Color32[] output = new Color32[m_textureSize * m_textureSize];
 
@@ -669,15 +734,20 @@ public class MapImageGeneration
                 if (!m_mapData[i])
                     continue;
 
-                if (forestMask[i].r == 0)
+                if (forestMask[i].r == 0f)
                 {
                     output[i] = array[i];
                 }
                 else
                 {
-                    output[i].r = (byte)(array[i].r * forestColorFactor);
-                    output[i].g = (byte)(array[i].g * forestColorFactor);
-                    output[i].b = (byte)(array[i].b * forestColorFactor);
+                    float factor = 1f - (1f - forestColorFactor) * forestMask[i].r;
+
+                    if (forestMask[i].g > 0f)
+                        output[i].g = (byte)(array[i].g + (byte)(forestMask[i].g * forestMask[i].b * 255f));
+
+                    output[i].r = (byte)(array[i].r * factor);
+                    output[i].g = (byte)(array[i].g * factor);
+                    output[i].b = (byte)(array[i].b * factor);
                     output[i].a = array[i].a;
                 }
             }

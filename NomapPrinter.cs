@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.1.0";
+        const string pluginVersion = "1.1.1";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -91,7 +91,7 @@ namespace NomapPrinter
         public static float abyss_depth = -100f;
 
         private static Color32[] m_mapTexture;
-        private static Color32[] m_forestTexture;
+        private static Color[] m_forestTexture;
         private static Color32[] m_heightmap;
         private static bool[] m_exploration;
         private static bool[] m_mapData;
@@ -107,7 +107,7 @@ namespace NomapPrinter
         public static GameObject mapContent;
         public static RectTransform content;
 
-        public static Texture2D mapTexture = new Texture2D(4096, 4096);
+        public static Texture2D mapTexture = new Texture2D(4096, 4096, TextureFormat.RGB24, false);
 
         private static bool mapWindowInitialized = false;
         private static bool mapTextureIsReady = false;
@@ -132,7 +132,8 @@ namespace NomapPrinter
             BirdsEye,
             Topographical,
             Chart,
-            OldChart
+            OldChart,
+            Vanilla
         }
 
         public enum MapSize
@@ -259,10 +260,11 @@ namespace NomapPrinter
             if (scaleIncrement == 0)
                 scaleIncrement = mapDefaultScale.Value - content.localScale.x;
 
-            int factor = mapSize.Value == MapSize.Small ? 1 : 2;
-            
-            float minScale = Mathf.Max(mapMinimumScale.Value, 0.1f) * 2 / factor;
-            float maxScale = Mathf.Min(mapMaximumScale.Value, 2f) * factor;
+            int sizeFactor = (mapSize.Value == MapSize.Small ? 1 : 2);
+            int typeFactor = (mapType.Value == MapType.Vanilla ? 2 : 1);
+
+            float minScale = Mathf.Max(mapMinimumScale.Value, 0.1f) * 2 * typeFactor / sizeFactor;
+            float maxScale = Mathf.Min(mapMaximumScale.Value, 2f) * typeFactor * sizeFactor;
 
             RectTransformUtility.ScreenPointToLocalPointInRectangle(content, Input.mousePosition, null, out Vector2 relativeMousePosition);
             
@@ -961,41 +963,51 @@ namespace NomapPrinter
             private static int iconSize = 16;
             private static int textureSize;
 
+            private static Texture2D noClouds;
+
             public IEnumerator Go()
             {
                 working = true;
 
-                ShowMessage(messageStart.Value);
-
-                yield return PrepareTerrainData();
-
-                ShowMessage(messageSaving.Value);
-
-                MapImageGeneration.Initialize(m_mapTexture, m_forestTexture, m_heightmap, m_exploration, textureSize, m_mapData);
-
-                MapImageGeneration imageGen = new MapImageGeneration();
-
-                GetPinsToPrint();
-
-                switch (mapType.Value)
+                if (mapType.Value != MapType.Vanilla)
                 {
-                    case MapType.BirdsEye:
-                        yield return imageGen.GenerateSatelliteImage();
-                        break;
-                    case MapType.Topographical:
-                        yield return imageGen.GenerateTopographicalMap(graduationLinesDensity.Value);
-                        break;
-                    case MapType.Chart:
-                        yield return imageGen.GenerateChartMap(graduationLinesDensity.Value);
-                        break;
-                    case MapType.OldChart:
-                        yield return imageGen.GenerateOldMap(graduationLinesDensity.Value);
-                        break;
-                    default:
-                        goto case MapType.Chart;
-                }
+                    ShowMessage(messageStart.Value);
 
-                ApplyMapTexture(mapType.Value, imageGen.output);
+                    yield return PrepareTerrainData();
+
+                    ShowMessage(messageSaving.Value);
+
+                    MapImageGeneration.Initialize(m_mapTexture, m_forestTexture, m_heightmap, m_exploration, textureSize, m_mapData);
+
+                    MapImageGeneration imageGen = new MapImageGeneration();
+
+                    switch (mapType.Value)
+                    {
+                        case MapType.BirdsEye:
+                            yield return imageGen.GenerateSatelliteImage();
+                            break;
+                        case MapType.Topographical:
+                            yield return imageGen.GenerateTopographicalMap(graduationLinesDensity.Value);
+                            break;
+                        case MapType.Chart:
+                            yield return imageGen.GenerateChartMap(graduationLinesDensity.Value);
+                            break;
+                        case MapType.OldChart:
+                            yield return imageGen.GenerateOldMap(graduationLinesDensity.Value);
+                            break;
+                        default:
+                            goto case MapType.Chart;
+                    }
+
+                    ApplyMapTexture(mapType.Value, imageGen.output);
+                }
+                else
+                {
+                    ShowMessage(messageSaving.Value);
+                    yield return GetVanillaMap(2048 * (int) mapSize.Value);
+
+
+                }
 
                 if (saveMapToFile.Value)
                 {
@@ -1014,18 +1026,27 @@ namespace NomapPrinter
 
                     string filepath = Path.GetDirectoryName(filename);
 
-                    try
+                    var internalThread = new Thread(() =>
                     {
-                        Directory.CreateDirectory(filepath);
+                        try
+                        {
+                            Directory.CreateDirectory(filepath);
+                            Log($"Writing {filename}");
+                            File.WriteAllBytes(filename, ImageConversion.EncodeToPNG(mapTexture));
+                        }
+                        catch (Exception ex)
+                        {
+                            Log(ex);
+                        }
+                    });
 
-                        Log($"Writing {filename}");
-                        File.WriteAllBytes(filename, ImageConversion.EncodeToPNG(mapTexture));
-                        ShowMessage($"{messageSavedTo.Value} {filepath}", MessageHud.MessageType.TopLeft);
-                    }
-                    catch (Exception ex)
+                    internalThread.Start();
+                    while (internalThread.IsAlive == true)
                     {
-                        Log(ex);
+                        yield return null;
                     }
+
+                    ShowMessage($"{messageSavedTo.Value} {filepath}", MessageHud.MessageType.TopLeft);
                 }
 
                 Log("Finished Map Draw");
@@ -1053,7 +1074,7 @@ namespace NomapPrinter
                 float num2 = m_pixelSize / 2f;
 
                 Color32[] biomeColor = new Color32[textureSize * textureSize];
-                Color32[] forest = new Color32[textureSize * textureSize];
+                Color[] forest = new Color[textureSize * textureSize];
                 Color32[] heightmap = new Color32[textureSize * textureSize];
                 bool[] exploration = new bool[textureSize * textureSize];
 
@@ -1094,10 +1115,10 @@ namespace NomapPrinter
                                 continue;
 
                             Heightmap.Biome biome = WorldGenerator.instance.GetBiome(wx, wy);
-                            float biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color _);
+                            float biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color mask);
                             float height = biomeHeight - ZoneSystem.instance.m_waterLevel;
 
-                            forest[pos] = GetMaskColor(wx, wy, height, biome);
+                            forest[pos] = GetMaskColor(wx, wy, height, biome, mask);
 
                             // Black outside the actual map
                             if (biomeHeight < abyss_depth)
@@ -1131,6 +1152,164 @@ namespace NomapPrinter
                 m_mapData = mapData;
             }
 
+            private static IEnumerator GetVanillaMap(int resolution)
+            {
+                bool wasOpen = Minimap.instance.m_largeRoot.activeSelf;
+                if (!wasOpen)
+                {
+                    bool nomap = Game.m_noMap;
+                    
+                    if (nomap)
+                        Game.m_noMap = false;
+
+                    Minimap.instance.SetMapMode(Minimap.MapMode.Large);
+                    Minimap.instance.CenterMap(Vector3.zero);
+
+                    if (nomap)
+                        Game.m_noMap = true;
+                }
+
+                if (noClouds == null)
+                {
+                    noClouds = new Texture2D(1, 1);
+                    noClouds.SetPixels(new Color[1] { Color.clear });
+                    noClouds.Apply(false);
+                }
+
+                Material material = Minimap.instance.m_mapImageLarge.material;
+
+                // Disable clouds
+                Texture clouds = material.GetTexture("_CloudTex");
+                material.SetTexture("_CloudTex", noClouds);
+
+                // Replace shared map toggle
+                bool m_showSharedMapData = Minimap.instance.m_showSharedMapData;
+                float m_sharedMapDataFadeRate = Minimap.instance.m_sharedMapDataFadeRate;
+                bool replaceSharedMapToggle = showSharedMap.Value != Minimap.instance.m_showSharedMapData;
+
+                if (replaceSharedMapToggle)
+                {
+                    Minimap.instance.m_showSharedMapData = showSharedMap.Value;
+                    Minimap.instance.m_sharedMapDataFadeRate = 1000f;
+
+                    while (Minimap.instance.m_sharedMapDataFade != (showSharedMap.Value ? 1f : 0f))
+                        yield return new WaitForEndOfFrame();
+                }
+
+                GameObject mapPanelObject = InitMapPanel(material);
+
+                RenderTexture renderTexture = new RenderTexture(resolution, resolution, 24);
+                
+                GameObject cameraObject = new GameObject()
+                {
+                    layer = 19
+                };
+               
+                Camera camera = cameraObject.AddComponent<Camera>();
+                camera.targetTexture = renderTexture;
+                camera.orthographic = true;
+                camera.rect = new Rect(0, 0, resolution, resolution);
+                camera.nearClipPlane = 0;
+                camera.farClipPlane = 100;
+                camera.orthographicSize = 50;
+                camera.cullingMask = 1 << 19;
+                camera.Render();
+
+                yield return new WaitForEndOfFrame();
+
+                RenderTexture.active = renderTexture;
+
+                mapTexture.Reinitialize(resolution, resolution, TextureFormat.RGB24, false);
+                mapTexture.ReadPixels(new Rect(0, 0, resolution, resolution), 0, 0);
+
+                if (showPins.Value)
+                {
+                    Color32[] map = mapTexture.GetPixels32();
+
+                    GetPinsToPrint();
+                    AddPinsOnMap(map, resolution);
+
+                    mapTexture.SetPixels32(map);
+                }
+
+                mapTexture.Apply();
+
+                ResetViewerContentSize();
+
+                RenderTexture.active = null;
+
+                Destroy(mapPanelObject);
+                Destroy(cameraObject);
+                Destroy(renderTexture);
+
+                // Return clouds
+                material.SetTexture("_CloudTex", clouds);
+
+                // Return shared map toggle
+                if (replaceSharedMapToggle)
+                {
+                    Minimap.instance.m_showSharedMapData = m_showSharedMapData;
+                    Minimap.instance.m_sharedMapDataFadeRate = m_sharedMapDataFadeRate;
+                }
+
+                if (!wasOpen)
+                    Minimap.instance.SetMapMode(Minimap.MapMode.Small);
+            }
+
+            private static GameObject InitMapPanel(Material material)
+            {
+                Vector3[] vertices = new Vector3[4]
+                {
+                    new Vector3(-100 / 2, -100 / 2, 10),
+                    new Vector3(100 / 2, -100 / 2, 10),
+                    new Vector3(-100 / 2, 100 / 2, 10),
+                    new Vector3(100 / 2, 100 / 2, 10)
+                };
+
+                int[] tris = new int[6]
+                {
+                    0,
+                    2,
+                    1,
+                    2,
+                    3,
+                    1
+                };
+                Vector3[] normals = new Vector3[4]
+                {
+                    -Vector3.forward,
+                    -Vector3.forward,
+                    -Vector3.forward,
+                    -Vector3.forward
+                };
+
+                Vector2[] uv = new Vector2[4]
+                {
+                    new Vector2(0, 0),
+                    new Vector2(1, 0),
+                    new Vector2(0, 1),
+                    new Vector2(1, 1)
+                };
+
+                GameObject gameObject = new GameObject();
+
+                MeshRenderer meshRenderer = gameObject.AddComponent<MeshRenderer>();
+                meshRenderer.sharedMaterial = material;
+
+                MeshFilter meshFilter = gameObject.AddComponent<MeshFilter>();
+                meshFilter.mesh = new Mesh
+                {
+                    vertices = vertices,
+                    triangles = tris,
+                    normals = normals,
+                    uv = uv
+                };
+
+                gameObject.layer = 19;
+
+                return gameObject;
+            }
+
             private static void ApplyMapTexture(MapType mapType, Color32[] map)
             {
                 DoubleMapSize(ref map, out int mapResolution);
@@ -1140,10 +1319,11 @@ namespace NomapPrinter
 
                 if (showPins.Value)
                 {
-                    AddPinsOnMap(map, mapType, mapResolution);
+                    GetPinsToPrint();
+                    AddPinsOnMap(map, mapResolution);
                 }
 
-                mapTexture.Reinitialize(mapResolution, mapResolution);
+                mapTexture.Reinitialize(mapResolution, mapResolution, TextureFormat.RGB24, false);
                 mapTexture.SetPixels32(map);
                 mapTexture.Apply();
 
@@ -1196,7 +1376,7 @@ namespace NomapPrinter
                     case Heightmap.Biome.Mountain:
                         return Minimap.instance.m_mountainColor;
                     case Heightmap.Biome.Mistlands:
-                        return new Color(0.2f, 0.2f, 0.25f);
+                        return new Color(0.30f, 0.20f, 0.30f);
                     case Heightmap.Biome.Ocean:
                         return Color.blue;
                     default:
@@ -1204,7 +1384,7 @@ namespace NomapPrinter
                 }
             }
 
-            private static Color GetMaskColor(float wx, float wy, float height, Heightmap.Biome biome)
+            private static Color GetMaskColor(float wx, float wy, float height, Heightmap.Biome biome, Color mask)
             {
                 Color noForest = new Color(0f, 0f, 0f, 0f);
                 Color forest = new Color(1f, 0f, 0f, 0f);
@@ -1224,14 +1404,14 @@ namespace NomapPrinter
                     case Heightmap.Biome.Mistlands:
                         {
                             float forestFactor = WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy));
-                            return new Color(0f, 1f - Utils.SmoothStep(1.1f, 1.3f, forestFactor), 0f, 0f);
+                            return new Color(0.5f + 0.5f * mask.a, 1f - Utils.SmoothStep(1.1f, 1.3f, forestFactor), 0.04f, 0f);
                         }
                     default:
                         return noForest;
                 }
             }
 
-            private static void AddPinsOnMap(Color32[] map, MapType mapType, int mapSize)
+            private static void AddPinsOnMap(Color32[] map, int mapSize)
             {
                 foreach (KeyValuePair<Vector3, string> pin in pinsToPrint)
                 {
@@ -1259,7 +1439,7 @@ namespace NomapPrinter
                                 int pos = (iconmy + row) * mapSize + iconmx + col;
 
                                 Color32 iconPix = iconPixels[row * iconSize + col];
-                                if (mapType == MapType.Chart || mapType == MapType.OldChart)
+                                if (mapType.Value == MapType.Chart || mapType.Value == MapType.OldChart)
                                 {
                                     // add yellow tint of chart maps, one iteration is enough for OldChart
                                     iconPix = Color32.Lerp(iconPix, MapImageGeneration.yellowMap, 0.33f * iconPix.a / 255f);
