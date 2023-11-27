@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.1.3";
+        const string pluginVersion = "1.1.4";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -903,12 +903,12 @@ namespace NomapPrinter
         [HarmonyPriority(Priority.Last)]
         public static class MapTable_OnRead_Patch
         {
-            static void Postfix(MapTable instance)
+            static void Postfix(MapTable __instance)
             {
                 if (!modEnabled.Value)
                     return;
 
-                if (!PrivateArea.CheckAccess(instance.transform.position))
+                if (!PrivateArea.CheckAccess(__instance.transform.position))
                 {
                     return;
                 }
@@ -918,7 +918,7 @@ namespace NomapPrinter
                     if (!mapTextureIsReady)
                         ShowMessage(messageNotReady.Value);
                     else
-                        NomapPrinter.instance.DisplayingWindow = true;
+                        instance.DisplayingWindow = true;
                     return;
                 }
 
@@ -936,12 +936,12 @@ namespace NomapPrinter
         [HarmonyPriority(Priority.Last)]
         public static class MapTable_OnWrite_Patch
         {
-            static void Postfix(MapTable instance)
+            static void Postfix(MapTable __instance)
             {
                 if (!modEnabled.Value)
                     return;
 
-                if (!PrivateArea.CheckAccess(instance.transform.position))
+                if (!PrivateArea.CheckAccess(__instance.transform.position))
                 {
                     return;
                 }
