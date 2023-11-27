@@ -60,6 +60,9 @@ https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationMa
 
 ## Changelog
 
+v 1.1.3
+* ward restrictions
+
 v 1.1.2
 * adjustments for Vanilla map style
 * pin scale option
