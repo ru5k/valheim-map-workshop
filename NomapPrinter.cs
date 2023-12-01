@@ -25,6 +25,9 @@ namespace NomapPrinter
 
         internal static readonly ConfigSync configSync = new ConfigSync(pluginID) { DisplayName = pluginName, CurrentVersion = pluginVersion, MinimumRequiredVersion = pluginVersion };
 
+        //
+        // -- configuration parameters
+        //
         private static ConfigEntry<bool> modEnabled;
         private static ConfigEntry<bool> configLocked;
 
@@ -35,6 +38,7 @@ namespace NomapPrinter
 
         private static ConfigEntry<MapWindow> mapWindow;
         private static ConfigEntry<bool> allowInteractiveMapOnWrite;
+        private static ConfigEntry<bool> showInteractiveMapOnTable;
         private static ConfigEntry<bool> showSharedMap;
         private static ConfigEntry<bool> preventPinAddition;
 
@@ -88,9 +92,13 @@ namespace NomapPrinter
 
         private static ConfigEntry<bool> tablePartsSwap;
 
+
         private static readonly CustomSyncedValue<string> mapDataFromFile = new CustomSyncedValue<string>(configSync, "mapDataFromFile", "");
 
+        // ! ref WorldGenerator::Initialize -> World - used to access World::m_name only
         public static World game_world;
+
+        // ! -> const
         public static float abyss_depth = -100f;
 
         private static Color32[] m_mapTexture;
@@ -99,9 +107,13 @@ namespace NomapPrinter
         private static bool[] m_exploration;
         private static bool[] m_mapData;
 
+        // ! internal map image renderer - async data provider and decorator for MapImageGeneration class
         MapGeneration maker;
+
+        // ! this object (singleton like)
         private static NomapPrinter instance;
 
+        // plugin save data path
         private static string localPath;
 
         private static readonly Dictionary<string, Color32[]> pinIcons = new Dictionary<string, Color32[]>();
@@ -110,21 +122,32 @@ namespace NomapPrinter
         public static GameObject mapContent;
         public static RectTransform content;
 
+        // mapTexture - final generated map image -> lazy initialization; see mapTextureIsReady
         public static Texture2D mapTexture = new Texture2D(4096, 4096, TextureFormat.RGB24, false);
 
+        // -- custom in game map view/show/display
         private static bool mapWindowInitialized = false;
+
+        // mapTexture::isReady -> do wee need this?
         private static bool mapTextureIsReady = false;
 
+        //
+        // -- custom in game map view/show/display
+        //
         private bool _displayingWindow = false;
-
         private PropertyInfo _curLockState;
         private PropertyInfo _curVisible;
         private int _previousCursorLockState;
         private bool _previousCursorVisible;
 
+
+        // key to save map image in player save file
         private static string saveFieldKey;
 
+        // plugin setup related
         private static DirectoryInfo pluginFolder;
+
+        // for loading map from externally provided (shared) file
         private static FileSystemWatcher fileSystemWatcher;
         private static string mapFileName;
 
@@ -396,6 +419,7 @@ namespace NomapPrinter
 
             mapWindow = config("Map", "Ingame map", MapWindow.ShowEverywhere, "Where to show ingame map");
             allowInteractiveMapOnWrite = config("Map", "Show interactive map on record discoveries", false, "Show interactive original game map on record discoveries part of map table used");
+            showInteractiveMapOnTable = config("Map", "Show interactive map on table", true, "Show interactive map variant on table if allowed");
             showSharedMap = config("Map", "Show shared map", true, "Show parts of the map shared by others");
             preventPinAddition = config("Map", "Prevent adding pins on interactive map", false, "Prevent creating pin when using interactive map");
 
@@ -453,8 +477,10 @@ namespace NomapPrinter
             tablePartsSwap = config("Table", "Swap interaction behaviour on map table parts", false, "Make \"Read map\" part to open interactive map and \"Record discoveries\" part to generate map. +" +
                                                                                                      "\nDoesn't work in Show On Interaction map mode [Not Synced with Server]", false);
 
+            // ?? why here
             localPath = Utils.GetSaveDataPath(FileHelpers.FileSource.Local);
 
+            // ?? why here, why static
             MapGeneration.InitIconSize();
 
             SetupMapFileWatcher();
@@ -878,18 +904,19 @@ namespace NomapPrinter
 
         private static void ShowInteractiveMap()
         {
-            if (!Game.m_noMap)
-                return;
+            bool noMap = Game.m_noMap;
 
             if (!allowInteractiveMapOnWrite.Value)
                 return;
 
-            Game.m_noMap = false;
+            if (noMap)
+                Game.m_noMap = false;
 
             Minimap.instance.inputDelay = 1f;
             Minimap.instance.SetMapMode(Minimap.MapMode.Large);
 
-            Game.m_noMap = true;
+            if (noMap)
+                Game.m_noMap = true;
         }
 
         [HarmonyPatch(typeof(MapTable), nameof(MapTable.OnRead), new Type[] { typeof(Switch), typeof(Humanoid), typeof(ItemDrop.ItemData), typeof(bool) })]
