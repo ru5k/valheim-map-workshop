@@ -172,6 +172,7 @@ namespace NomapPrinter
         {
             Character,
             LocalFolder,
+            // ? like local folder, but readonly
             LoadFromSharedFile
         }
 
@@ -179,14 +180,19 @@ namespace NomapPrinter
         {
             Hide,
             ShowEverywhere,
+            // next value seems to be similar to ShowEverywhere + (0 < TableDistance); if TableDistance == 0 then table presence is not needed to count with
             ShowNearTheTable,
+            // next value shouldn't be related to 'Map' key toggle
             ShowOnInteraction
         }
 
         void Awake()
         {
             harmony.PatchAll();
+
             instance = this;
+
+            // ? why here
             maker = new MapGeneration();
 
             pluginFolder = new DirectoryInfo(Assembly.GetExecutingAssembly().Location).Parent;
@@ -222,12 +228,26 @@ namespace NomapPrinter
                         }
                         else if (Input.GetMouseButtonDown(2)) // Middle click to reset position
                         {
-                            CenterMap();
+                            // debug -
+                            //CenterMap();
+                            // debug +
+                            DisplayingWindow = false;
                         }
                     }
 
                     // Block every other mouse clicks
                     Input.ResetInputAxes();
+                }
+
+                // debug +9
+                if (Event.current.isKey)
+                {
+                    Log($"OnGUI(): Event.current.isKey");
+                }
+
+                if (Event.current.isScrollWheel)
+                {
+                    Log($"OnGUI(): Event.current.isScrollWheel");
                 }
             }
         }
@@ -241,12 +261,27 @@ namespace NomapPrinter
 
         private void Update()
         {
-
             if (!modEnabled.Value)
                 return;
 
             if (!mapWindowInitialized)
                 return;
+
+            if (DisplayingWindow && ZInput.GetKeyDown(KeyCode.Escape))
+                DisplayingWindow = false;
+
+            if (DisplayingWindow)
+            {
+                // enable scroll to change map scale
+                float scrollIncrement = ZInput.GetAxis("Mouse ScrollWheel");
+                if (scrollIncrement != 0)
+                {
+                    ZoomMap(scrollIncrement);
+                }
+
+                // disable everything else not disabled at OnGUI call
+                Input.ResetInputAxes();
+            }
 
             if (!Game.m_noMap)
                 return;
@@ -260,22 +295,6 @@ namespace NomapPrinter
                     else
                         DisplayingWindow = !DisplayingWindow;
                 }
-            }
-
-            if (DisplayingWindow && ZInput.GetKeyDown(KeyCode.Escape))
-                DisplayingWindow = false; 
-
-            if (DisplayingWindow)
-            {
-                // enable scroll to change map scale
-                float scrollIncrement = ZInput.GetAxis("Mouse ScrollWheel");
-                if (scrollIncrement != 0)
-                {
-                    ZoomMap(scrollIncrement);
-                }
-
-                // disable everything else not disabled at OnGUI call
-                Input.ResetInputAxes();
             }
         }
 
@@ -340,11 +359,13 @@ namespace NomapPrinter
 
                 Player localPlayer = Player.m_localPlayer;
 
-                return !(localPlayer == null || localPlayer.IsDead() || localPlayer.InCutscene() || localPlayer.IsTeleporting()) &&
-                        (Chat.instance == null || !Chat.instance.HasFocus()) &&
-                        !Console.IsVisible() && !Menu.IsVisible() && TextViewer.instance != null &&
-                        !TextViewer.instance.IsVisible() && !TextInput.IsVisible() && !Minimap.IsOpen();
-
+                return !(localPlayer == null || localPlayer.IsDead() || localPlayer.InCutscene() || localPlayer.IsTeleporting())
+                    &&  (Chat.instance == null || !Chat.instance.HasFocus())
+                    && !Console.IsVisible()
+                    && !Menu.IsVisible()
+                    &&  (TextViewer.instance == null || !TextViewer.instance.IsVisible())
+                    && !TextInput.IsVisible()
+                    && !Minimap.IsOpen();
             }
         }
 
@@ -1312,6 +1333,7 @@ namespace NomapPrinter
 
                 RenderTexture.active = renderTexture;
 
+                // ?
                 mapTexture.Reinitialize(resolution, resolution, TextureFormat.RGB24, false);
                 mapTexture.ReadPixels(new Rect(0, 0, resolution, resolution), 0, 0);
 
@@ -1422,6 +1444,7 @@ namespace NomapPrinter
                     AddPinsOnMap(map, mapResolution);
                 }
 
+                // ?
                 mapTexture.Reinitialize(mapResolution, mapResolution, TextureFormat.RGB24, false);
                 mapTexture.SetPixels32(map);
                 mapTexture.Apply();
