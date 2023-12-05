@@ -171,6 +171,7 @@ namespace NomapPrinter
         {
             Character,
             LocalFolder,
+            // ? like local folder, but readonly
             LoadFromSharedFile
         }
 
@@ -178,14 +179,19 @@ namespace NomapPrinter
         {
             Hide,
             ShowEverywhere,
+            // next value seems to be similar to ShowEverywhere + (0 < TableDistance); if TableDistance == 0 then table presence is not needed to count with
             ShowNearTheTable,
+            // next value shouldn't be related to 'Map' key toggle
             ShowOnInteraction
         }
 
         void Awake()
         {
             harmony.PatchAll();
+
             instance = this;
+
+            // ? why here
             maker = new MapGeneration();
 
             pluginFolder = new DirectoryInfo(Assembly.GetExecutingAssembly().Location).Parent;
@@ -221,12 +227,26 @@ namespace NomapPrinter
                         }
                         else if (Input.GetMouseButtonDown(2)) // Middle click to reset position
                         {
-                            CenterMap();
+                            // debug -
+                            //CenterMap();
+                            // debug +
+                            DisplayingWindow = false;
                         }
                     }
 
                     // Block every other mouse clicks
                     Input.ResetInputAxes();
+                }
+
+                // debug +9
+                if (Event.current.isKey)
+                {
+                    Log($"OnGUI(): Event.current.isKey");
+                }
+
+                if (Event.current.isScrollWheel)
+                {
+                    Log($"OnGUI(): Event.current.isScrollWheel");
                 }
             }
         }
@@ -246,22 +266,8 @@ namespace NomapPrinter
             if (!mapWindowInitialized)
                 return;
 
-            if (!Game.m_noMap)
-                return;
-
-            if (CanOperateMap)
-            {
-                if (ZInput.GetButtonUp("Map") || ZInput.GetButtonUp("JoyMap"))
-                {
-                    if (!mapTextureIsReady)
-                        ShowMessage(messageNotReady.Value);
-                    else
-                        DisplayingWindow = !DisplayingWindow;
-                }
-            }
-
             if (DisplayingWindow && ZInput.GetKeyDown(KeyCode.Escape))
-                DisplayingWindow = false; 
+                DisplayingWindow = false;
 
             if (DisplayingWindow)
             {
@@ -274,6 +280,20 @@ namespace NomapPrinter
 
                 // disable everything else not disabled at OnGUI call
                 Input.ResetInputAxes();
+            }
+
+            if (!Game.m_noMap)
+                return;
+
+            if (CanOperateMap)
+            {
+                if (ZInput.GetButtonUp("Map") || ZInput.GetButtonUp("JoyMap"))
+                {
+                    if (!mapTextureIsReady)
+                        ShowMessage(messageNotReady.Value);
+                    else
+                        DisplayingWindow = !DisplayingWindow;
+                }
             }
         }
 
@@ -1275,6 +1295,7 @@ namespace NomapPrinter
 
                 RenderTexture.active = renderTexture;
 
+                // ?
                 mapTexture.Reinitialize(resolution, resolution, TextureFormat.RGB24, false);
                 mapTexture.ReadPixels(new Rect(0, 0, resolution, resolution), 0, 0);
 
@@ -1385,6 +1406,7 @@ namespace NomapPrinter
                     AddPinsOnMap(map, mapResolution);
                 }
 
+                // ?
                 mapTexture.Reinitialize(mapResolution, mapResolution, TextureFormat.RGB24, false);
                 mapTexture.SetPixels32(map);
                 mapTexture.Apply();
