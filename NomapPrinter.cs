@@ -56,6 +56,14 @@ namespace NomapPrinter
         private static ConfigEntry<float> mapMinimumScale;
         private static ConfigEntry<float> mapMaximumScale;
 
+        private static ConfigEntry<Mapmaker> mapMaker;             // to not mess the code
+        private static ConfigEntry<MapStyle> mapStyle;
+        private static ConfigEntry<MapScale> mapScale;
+        private static ConfigEntry<int>      mapHeightDivider;
+        private static ConfigEntry<int>      mapDepthDivider;
+        private static ConfigEntry<int>      mapContourInterval;
+        private static ConfigEntry<bool>     mapFetchOnlyExplored;
+
         private static ConfigEntry<int> heightmapFactor;
         private static ConfigEntry<int> graduationLinesDensity;
         private static ConfigEntry<float> pinScale;
@@ -99,7 +107,7 @@ namespace NomapPrinter
         public static World game_world;
 
         // ! -> const
-        public static float abyss_depth = -100f;
+        public const float abyssBiomeHeight = -100f;
 
         private static Color32[] m_mapTexture;
         private static Color[] m_forestTexture;
@@ -130,6 +138,9 @@ namespace NomapPrinter
 
         // mapTexture::isReady -> do wee need this?
         private static bool mapTextureIsReady = false;
+
+        public static Texture2D map        = null;  // new Texture2D(4096, 4096, TextureFormat.RGB24, false);
+        public static bool      mapIsReady = false;
 
         //
         // -- custom in game map view/show/display
@@ -167,6 +178,27 @@ namespace NomapPrinter
             Smooth = 4
         }
 
+        public enum Mapmaker
+        {
+            shudnal,
+            zwiebaq
+        }
+
+        public enum MapStyle
+        {
+            Paint,
+            Topo,
+            Chart,
+            Ink
+        }
+
+        public enum MapScale
+        {
+            Original  = 1,
+            Double    = 2,
+            Quadruple = 4
+        }
+
         public enum MapStorage
         {
             Character,
@@ -184,6 +216,16 @@ namespace NomapPrinter
             // next value shouldn't be related to 'Map' key toggle
             ShowOnInteraction
         }
+
+        //
+        // Unity messages
+        //
+        //   void Awake()
+        //   void OnDestroy()
+        //   void OnGUI()
+        //   void Start()
+        //   void Update()
+        //
 
         void Awake()
         {
@@ -465,6 +507,15 @@ namespace NomapPrinter
             pinScale = config("Map style extended", "Pin scale", 1.0f, "Pin scale");
             preserveSharedMapFog = config("Map style extended", "Preserve shared map fog tint for vanilla map", true, "Generate Vanilla map with shared map fog tint");
 
+            mapMaker             = xconfig("Map",              "Mapmaker",             Mapmaker.shudnal, "Scale of rendered map.",         false);
+
+            mapScale             = xconfig("Mapmaker.zwiebaq", "mapScale",             MapScale.Double,  "Scale of rendered map.",         false);
+            mapStyle             = xconfig("Mapmaker.zwiebaq", "mapStyle",             MapStyle.Topo,    "Map rendering style.",           false);
+            mapHeightDivider     = xconfig("Mapmaker.zwiebaq", "mapHeightDivider",     256,              "Original height value divider.", false);
+            mapDepthDivider      = xconfig("Mapmaker.zwiebaq", "mapDepthDivider",      256,              "Original depth value divider.",  false);
+            mapContourInterval   = xconfig("Mapmaker.zwiebaq", "mapContourInterval",   8,                "Contour interval.",              false);
+            mapFetchOnlyExplored = xconfig("Mapmaker.zwiebaq", "mapFetchOnlyExplored", true,             "Fetch map data only for explored area.", false);
+
             messageStart = config("Messages", "Drawing begin", "Remembering travels...", "Center message when drawing is started. [Not Synced with Server]", false);
             messageSaving = config("Messages", "Drawing end", "Drawing map...", "Center message when saving file is started. [Not Synced with Server]", false);
             messageReady = config("Messages", "Saved", "Map is ready", "Center message when file is saved. [Not Synced with Server]", false);
@@ -523,6 +574,8 @@ namespace NomapPrinter
         }
 
         ConfigEntry<T> config<T>(string group, string name, T defaultValue, string description, bool synchronizedSetting = true) => config(group, name, defaultValue, new ConfigDescription(description), synchronizedSetting);
+
+        ConfigEntry<T> xconfig<T>(string group, string name, T defaultValue, string description, bool synchronizedSetting = true) => config(group, name, defaultValue, new ConfigDescription(description + (synchronizedSetting ? "" : " [Not Synced with Server]")), synchronizedSetting);
 
         private static void SetupMapFileWatcher()
         {
@@ -919,7 +972,12 @@ namespace NomapPrinter
                 return;
 
             if (!instance.maker.working)
-                instance.StartCoroutine(instance.maker.Go());
+            {
+                if (mapMaker.Value == Mapmaker.shudnal)
+                    instance.StartCoroutine(instance.maker.Go());
+                else
+                    instance.StartCoroutine(instance.maker.Go2());
+            }
         }
 
         private static void ShowInteractiveMap()
@@ -1021,6 +1079,11 @@ namespace NomapPrinter
 
             private static Texture2D noClouds;
 
+            private static Color m_deepNorthColor = new Color(0.85f, 0.85f, 1f);     // Blueish color
+            private static Color m_mistlandsColor = new Color(0.30f, 0.20f, 0.30f);
+            private static Color m_noForestColor  = Color.clear;                     // new Color(0f, 0f, 0f, 0f);
+            private static Color m_forestColor    = Color.red;                       // new Color(1f, 0f, 0f, 0f);
+
             public IEnumerator Go()
             {
                 working = true;
@@ -1117,6 +1180,142 @@ namespace NomapPrinter
                 working = false;
             }
 
+            public string GetMapFileDir()
+            {
+                string path;
+
+                if (filePath.Value.IsNullOrWhiteSpace())
+                {
+                    path = Path.Combine(localPath, "map");
+                }
+                else
+                {
+                    path = filePath.Value;
+                }
+
+                //Directory.CreateDirectory(path);
+
+                return path;
+            }
+
+            public string GetMapFileName(string tag = "")
+            {
+                //string playerName  = Player.m_localPlayer != null ? Player.m_localPlayer.GetPlayerName() : "w";
+                string worldName   = game_world != null ? game_world.m_name : "w";
+                string mapStyleStr = mapStyle.Value.ToString().ToLower();
+                if (tag.Length > 0)
+                    tag = "-" + tag;
+                return $"valheim-map-{worldName}-{mapStyleStr}-{textureSize}{tag}.png";
+            }
+
+            public string GetPlayerName()
+            {
+                return Player.m_localPlayer != null ? Player.m_localPlayer.GetPlayerName() : "x";
+            }
+
+            public IEnumerator Go2()
+            {
+                working = true;
+
+                ShowMessage(messageStart.Value);
+
+                yield return GetMapData();
+
+                ShowMessage(messageSaving.Value);
+
+                MapImageGeneration.Initialize(m_mapTexture, m_forestTexture, m_heightmap, m_exploration, textureSize, m_mapData);
+
+                MapImageGeneration imageGen = new MapImageGeneration();
+
+                imageGen.mapWithoutFog = map?.GetPixels32(); // map != null ? map.GetPixels32() : null;
+
+                switch (mapStyle.Value)
+                {
+                    case MapStyle.Paint:
+                        yield return imageGen.GenerateSatelliteImage();
+                        break;
+                    case MapStyle.Topo:
+                        yield return imageGen.GenerateTopographicalMap(mapContourInterval.Value);
+                        break;
+                    case MapStyle.Chart:
+                        yield return imageGen.GenerateChartMap(mapContourInterval.Value);
+                        break;
+                    case MapStyle.Ink:
+                        yield return imageGen.GenerateOldMap(mapContourInterval.Value);
+                        break;
+                    default:
+                        goto case MapStyle.Topo;
+                }
+
+                if (saveMapToFile.Value)
+                {
+                    if (map == null)
+                    {
+                        map = new Texture2D(textureSize, textureSize, TextureFormat.RGB24, false);
+                        map.SetPixels32(imageGen.mapWithoutFog);
+                        map.Apply();
+                    }
+                    else
+                    {
+                        //if (map.width != textureSize || map.height != textureSize)
+                        //    map.Reinitialize(textureSize, textureSize, TextureFormat.RGB24, false);
+                    }
+                }
+
+                ApplyMapTexture2(imageGen.output);  // also decorates map with pins
+
+                if (saveMapToFile.Value)
+                {
+                    var internalThread = new Thread(() =>
+                    {
+                        try
+                        {
+                            string fileDir = GetMapFileDir();
+                            string fileName;
+
+                            Directory.CreateDirectory(fileDir);
+
+                            if (!mapIsReady && !mapFetchOnlyExplored.Value)
+                            {
+                                fileName = Path.Combine(fileDir, GetMapFileName());  // Path.Combine(filepath, $"{fileNameKey}-clear.png");
+                                Log($"[i] saving clear map to file \"{fileName}\"");
+                                File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(map));
+                                mapIsReady = true;
+                            }
+
+                            fileName = Path.Combine(fileDir, GetMapFileName(GetPlayerName()));  // Path.Combine(filepath, $"{fileNameKey}.png");
+                            Log($"[i] saving player map to file \"{fileName}\"");
+                            File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(mapTexture));
+                        }
+                        catch (Exception e)
+                        {
+                            Log(e);
+                        }
+                    });
+
+                    internalThread.Start();
+                    while (internalThread.IsAlive == true)
+                    {
+                        yield return null;
+                    }
+
+                    ShowMessage($"{messageSavedTo.Value} {GetMapFileDir()}", MessageHud.MessageType.TopLeft);
+                }
+
+                Log("Finished Map Draw");
+                ShowMessage(messageReady.Value);
+
+                MapImageGeneration.DeInitialize();
+
+                m_mapTexture = null;
+                m_forestTexture = null;
+                m_heightmap = null;
+                m_exploration = null;
+                m_mapData = null;
+
+                working = false;
+            }
+
             private IEnumerator PrepareTerrainData()
             {
                 int mapSizeFactor = mapSize.Value == MapSize.Smooth ? 2 : 1;
@@ -1175,7 +1374,7 @@ namespace NomapPrinter
                             forest[pos] = GetMaskColor(wx, wy, height, biome, mask);
 
                             // Black outside the actual map
-                            if (biomeHeight < abyss_depth)
+                            if (biomeHeight < abyssBiomeHeight)
                             {
                                 biomeColor[pos] = Color.black;
                                 continue;
@@ -1204,6 +1403,167 @@ namespace NomapPrinter
                 m_heightmap = heightmap;
                 m_exploration = exploration;
                 m_mapData = mapData;
+            }
+
+            private IEnumerator GetMapData()
+            {
+                int scaleFactor = (int)mapScale.Value;
+
+                textureSize = scaleFactor * Minimap.instance.m_textureSize;
+
+                Texture2D fogTexture      = (Texture2D)Minimap.instance.m_mapImageLarge.material.GetTexture("_FogTex");
+                float     pixelSize       = (float)Minimap.instance.m_pixelSize / scaleFactor;
+                int       waterLevel      = (int)ZoneSystem.instance.m_waterLevel;
+                int       halfTextureSize = textureSize / 2;
+                float     halfPixelSize   = pixelSize / 2f;
+                int       arraySize       = textureSize * textureSize;
+
+                Color32[] array  = new Color32[arraySize];  // texture {color}
+                Color[]   array2 = new Color[arraySize];    // forest  {bool}
+                Color32[] array3 = new Color32[arraySize];  // height  {float}
+                //Color32[] array4 = new Color32[arraySize];  // fog     {bool}
+
+                bool[]    exploration = new bool[arraySize];
+                bool[]    mapData     = new bool[arraySize];
+
+                var internalThread = new Thread(() =>
+                {
+                    if (!mapFetchOnlyExplored.Value)
+                    {
+                        for (int i = 0; i < arraySize; ++i)
+                        {
+                            mapData[i] = true;
+                        }
+
+                        if (saveMapToFile.Value)
+                        {
+                            if (map == null)
+                            {
+                                string filename = Path.Combine(GetMapFileDir(), GetMapFileName());
+
+                                if (!File.Exists(filename))
+                                {
+                                    Log($"[i] no map save file \"{filename}\" found");
+                                }
+                                else
+                                {
+                                    try
+                                    {
+                                        Log($"[i] loading map data from \"{filename}\"");
+                                        map = new Texture2D(textureSize, textureSize, TextureFormat.RGB24, false);
+                                        map.LoadImage(File.ReadAllBytes(filename));
+                                        map.Apply();
+                                        mapIsReady = true;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Log($"[e] failed to load map: {ex}");
+                                        map = null;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < textureSize; ++i)
+                        {
+                            for (int j = 0; j < textureSize; ++j)
+                            {
+                                int pos = i * textureSize + j;
+
+                                exploration[pos] = IsExplored(j / scaleFactor, i / scaleFactor);
+
+                                if (!exploration[pos])
+                                    continue;
+
+                                // Get map data in a small radius
+                                for (int di = -1; di < 2; ++di)
+                                {
+                                    for (int dj = -1; dj < 2; ++dj)
+                                    {
+                                        if ((i + di >= 0) && (j + dj >= 0) && (i + di < textureSize) && (j + dj < textureSize))
+                                            mapData[(i + di) * textureSize + j + dj] = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (map != null)
+                    {
+                        for (int i = 0; i < textureSize; ++i)
+                        {
+                            for (int j = 0; j < textureSize; ++j)
+                            {
+                                int pos = i * textureSize + j;
+                                exploration[pos] = IsExplored(j / scaleFactor, i / scaleFactor);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0, ti = 0; i < textureSize; ++i, ti += textureSize)
+                        {
+                            float wy = (float)(i - halfTextureSize) * pixelSize + halfPixelSize;
+
+                            for (int j = 0, n = ti; j < textureSize; ++j, ++n)
+                            {
+                                if (!mapData[n])  // ? what about abyss? check
+                                    continue;
+
+                                float wx = (float)(j - halfTextureSize) * pixelSize + halfPixelSize;
+
+                                Heightmap.Biome biome       = WorldGenerator.instance.GetBiome(wx, wy);
+                                float           biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color mask);
+
+                                float height = biomeHeight - waterLevel;
+
+                                array2[n] = GetMaskColor(wx, wy, height, biome);  // -> forest
+
+                                if (biomeHeight <= abyssBiomeHeight)
+                                {
+                                    array[n] = Color.black;  // off map biome color
+                                }
+                                else
+                                {
+                                    // Biome color
+                                    array[n] = GetPixelColor(biome, biomeHeight);
+
+                                    // Downscaled biome height as color
+                                    if (height > 0)
+                                        array3[n] = new Color(height / mapHeightDivider.Value, 0f, 0f);
+                                    else
+                                        array3[n] = new Color(0f, 0f, height / -mapDepthDivider.Value);
+
+                                    // Fog map and exploration data
+                                    if (!mapFetchOnlyExplored.Value)
+                                    {
+                                        Color pixel = fogTexture.GetPixel(j / scaleFactor, i / scaleFactor);
+                                        bool isFog = pixel.r != 0f && (!showSharedMap.Value || pixel.g != 0f);
+                                        exploration[n] = !isFog;
+                                        //array4[n] = isFog ? Color.gray : Color.clear;
+                                    }
+                                }
+
+                            }
+                        }
+                    }
+                });
+
+                internalThread.Start();
+                while (internalThread.IsAlive == true)
+                {
+                    yield return null;
+                }
+
+                m_mapTexture    = array;
+                m_forestTexture = array2;
+                m_heightmap     = array3;
+                //m_fogmap        = array4;
+
+                m_exploration   = exploration;
+                m_mapData       = mapData;
             }
 
             private static IEnumerator GetVanillaMap(int resolution)
@@ -1416,6 +1776,24 @@ namespace NomapPrinter
                 mapTextureIsReady = true;
             }
 
+            private static void ApplyMapTexture2(Color32[] map)
+            {
+                if (showPins.Value)
+                {
+                    GetPinsToPrint();
+                    AddPinsOnMap(map, textureSize);
+                }
+
+                // ?
+                mapTexture.Reinitialize(textureSize, textureSize, TextureFormat.RGB24, false);
+                mapTexture.SetPixels32(map);
+                mapTexture.Apply();
+
+                ResetViewerContentSize();
+
+                mapTextureIsReady = true;
+            }
+
             private static void DoubleMapSize(ref Color32[] map, out int mapSize)
             {
                 int currentMapSize = (int)Math.Sqrt(map.Length);
@@ -1440,7 +1818,7 @@ namespace NomapPrinter
 
             private static Color GetPixelColor(Heightmap.Biome biome, float height)
             {
-                if (height < abyss_depth)
+                if (height < abyssBiomeHeight)
                     return Color.black;
 
                 switch (biome)
@@ -1452,7 +1830,7 @@ namespace NomapPrinter
                     case Heightmap.Biome.BlackForest:
                         return Minimap.instance.m_blackforestColor;
                     case Heightmap.Biome.DeepNorth:
-                        return new Color(0.85f, 0.85f, 1f);  // Blueish color
+                        return m_deepNorthColor;
                     case Heightmap.Biome.Plains:
                         return Minimap.instance.m_heathColor;
                     case Heightmap.Biome.Swamp:
@@ -1460,7 +1838,7 @@ namespace NomapPrinter
                     case Heightmap.Biome.Mountain:
                         return Minimap.instance.m_mountainColor;
                     case Heightmap.Biome.Mistlands:
-                        return new Color(0.30f, 0.20f, 0.30f);
+                        return m_mistlandsColor;
                     case Heightmap.Biome.Ocean:
                         return Color.blue;
                     default:
@@ -1484,14 +1862,36 @@ namespace NomapPrinter
                     case Heightmap.Biome.Plains:
                         return !(WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy)) < 0.8f) ? noForest : forest;
                     case Heightmap.Biome.BlackForest:
+                        // ??
                         return mapType.Value == MapType.OldChart ? forest : blackforest;
                     case Heightmap.Biome.Mistlands:
                         {
+                            // ??
                             float forestFactor = WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy));
+                            // ??
                             return new Color(0.5f + 0.5f * mask.a, 1f - Utils.SmoothStep(1.1f, 1.3f, forestFactor), 0.04f, 0f);
                         }
                     default:
                         return noForest;
+                }
+            }
+
+            private static Color GetMaskColor(float wx, float wy, float height, Heightmap.Biome biome)
+            {
+                if (height < 0)
+                    return m_noForestColor;
+
+                switch (biome)
+                {
+                    case Heightmap.Biome.Meadows:
+                        return WorldGenerator.InForest(new Vector3(wx, 0.0f, wy)) ? m_forestColor : m_noForestColor;
+                    case Heightmap.Biome.Plains:
+                        return WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy)) < 0.8f ? m_forestColor : m_noForestColor;
+                    case Heightmap.Biome.BlackForest:
+                        return m_forestColor;
+                    case Heightmap.Biome.Mistlands:
+                    default:
+                        return m_noForestColor;
                 }
             }
 
