@@ -19,6 +19,8 @@ public class MapImageGeneration
     private Color32[] result;
     public Color32[] output;
 
+    public Color32[] mapWithoutFog = null;
+
     public static readonly Color32 yellowMap = new Color32(203, 155, 87, byte.MaxValue);
     public static readonly Color32 m_oceanColor = new Color32(20, 100, 255, byte.MaxValue);
 
@@ -33,6 +35,7 @@ public class MapImageGeneration
 
         mapSizeFactor = m_textureSize / Minimap.instance.m_textureSize;
 
+        // ? why we do it here - not inside MapGeneration::PrepareTerrainData() ?
         if (spaceRes == 0)
         {
             Texture spaceTex = Minimap.instance.m_mapImageLarge.material.GetTexture("_SpaceTex");
@@ -71,35 +74,46 @@ public class MapImageGeneration
     {
         output = null;
 
-        yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.25f);
-        Color32[] oceanTexture = result;
+        Color32[] outtex;
 
-        yield return ReplaceAbyssWithColor(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
-        Color32[] outtex = result;
+        if (mapWithoutFog != null)
+        {
+            outtex = mapWithoutFog;
+        }
+        else
+        {
+            yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.25f);
+            Color32[] oceanTexture = result;
 
-        yield return OverlayTexture(outtex, oceanTexture);
-        outtex = result;
+            yield return ReplaceAbyssWithColor(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
+            outtex = result;
 
-        yield return GetSolidColour(yellowMap);    //Yellowize map
-        Color32[] offYellow = result;
-        yield return LerpTextures(outtex, offYellow);
-        outtex = result;
-        yield return LerpTextures(outtex, offYellow);
-        outtex = result;
-        yield return LerpTextures(outtex, offYellow);
-        outtex = result;
+            yield return OverlayTexture(outtex, oceanTexture);
+            outtex = result;
 
-        yield return AddPerlinNoise(outtex, 128, 16);
-        outtex = result;
+            yield return GetSolidColour(yellowMap);    //Yellowize map
+            Color32[] offYellow = result;
+            yield return LerpTextures(outtex, offYellow);
+            outtex = result;
+            yield return LerpTextures(outtex, offYellow);
+            outtex = result;
+            yield return LerpTextures(outtex, offYellow);
+            outtex = result;
 
-        yield return ApplyForestMaskTexture(outtex, m_forestTexture, 0.95f);
-        outtex = result;
+            yield return AddPerlinNoise(outtex, 128, 16);
+            outtex = result;
 
-        yield return GenerateContourMap(m_heightmap, graduationHeight, 128);
-        Color32[] contours = result;
+            yield return ApplyForestMaskTexture(outtex, m_forestTexture, 0.95f);
+            outtex = result;
 
-        yield return OverlayTexture(outtex, contours);
-        outtex = result;
+            yield return GenerateContourMap(m_heightmap, graduationHeight, 128);
+            Color32[] contours = result;
+
+            yield return OverlayTexture(outtex, contours);
+            outtex = result;
+
+            mapWithoutFog = result;
+        }
 
         yield return StylizeFog(m_exploration);
         Color32[] fog = result;
@@ -114,32 +128,43 @@ public class MapImageGeneration
     {
         output = null;
 
-        yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.15f);
-        Color32[] oceanTexture = result;
+        Color32[] outtex;
 
-        yield return ReplaceAbyssWithColor(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
-        Color32[] outtex = result;
+        if (mapWithoutFog != null)
+        {
+            outtex = mapWithoutFog;
+        }
+        else
+        {
+            yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.15f);
+            Color32[] oceanTexture = result;
 
-        yield return OverlayTexture(outtex, oceanTexture);
-        outtex = result;
+            yield return ReplaceAbyssWithColor(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
+            outtex = result;
 
-        yield return GetSolidColour(yellowMap);    //Yellowize map
-        Color32[] offYellow = result;
+            yield return OverlayTexture(outtex, oceanTexture);
+            outtex = result;
 
-        yield return LerpTextures(outtex, offYellow);
-        outtex = result;
+            yield return GetSolidColour(yellowMap);    //Yellowize map
+            Color32[] offYellow = result;
 
-        yield return AddPerlinNoise(outtex, 128, 16);
-        outtex = result;
+            yield return LerpTextures(outtex, offYellow);
+            outtex = result;
 
-        yield return ApplyForestMaskTexture(outtex, m_forestTexture);
-        outtex = result;
+            yield return AddPerlinNoise(outtex, 128, 16);
+            outtex = result;
 
-        yield return GenerateContourMap(m_heightmap, graduationHeight, 128);
-        Color32[] contours = result;
+            yield return ApplyForestMaskTexture(outtex, m_forestTexture);
+            outtex = result;
 
-        yield return OverlayTexture(outtex, contours);
-        outtex = result;
+            yield return GenerateContourMap(m_heightmap, graduationHeight, 128);
+            Color32[] contours = result;
+
+            yield return OverlayTexture(outtex, contours);
+            outtex = result;
+
+            mapWithoutFog = result;
+        }
 
         yield return StylizeFog(m_exploration);
         Color32[] fog = result;
@@ -154,35 +179,46 @@ public class MapImageGeneration
     {
         output = null;
 
-        yield return GenerateOceanTexture(m_heightmap, m_mapTexture);
-        Color32[] oceanTexture = result;
+        Color32[] outtex;
 
-        yield return AddPerlinNoise(oceanTexture, 4, 64);
-        oceanTexture = result;
+        if (mapWithoutFog != null)
+        {
+            outtex = mapWithoutFog;
+        }
+        else
+        {
+            yield return GenerateOceanTexture(m_heightmap, m_mapTexture);
+            Color32[] oceanTexture = result;
 
-        yield return ReplaceAbyssWithSpace(m_mapTexture, new Color32(0, 0, 0, 255));    //Replace void with Space texture
-        Color32[] outtex = result;
+            yield return AddPerlinNoise(oceanTexture, 4, 64);
+            oceanTexture = result;
 
-        yield return OverlayTexture(outtex, oceanTexture);
-        outtex = result;
+            yield return ReplaceAbyssWithSpace(m_mapTexture, new Color32(0, 0, 0, 255));    //Replace void with Space texture
+            outtex = result;
 
-        yield return CreateShadowMap(m_heightmap, 23);
-        Color32[] shadowmap = result;
+            yield return OverlayTexture(outtex, oceanTexture);
+            outtex = result;
 
-        yield return DarkenTextureLinear(outtex, 20);
-        outtex = result;
+            yield return CreateShadowMap(m_heightmap, 23);
+            Color32[] shadowmap = result;
 
-        yield return ApplyForestMaskTexture(outtex, m_forestTexture);
-        outtex = result;
+            yield return DarkenTextureLinear(outtex, 20);
+            outtex = result;
 
-        yield return GenerateContourMap(m_heightmap, 128, 64);
-        Color32[] contours = result;
+            yield return ApplyForestMaskTexture(outtex, m_forestTexture);
+            outtex = result;
 
-        yield return OverlayTexture(outtex, contours);
-        outtex = result;
+            yield return GenerateContourMap(m_heightmap, 128, 64);
+            Color32[] contours = result;
 
-        yield return OverlayTexture(outtex, shadowmap);
-        outtex = result;
+            yield return OverlayTexture(outtex, contours);
+            outtex = result;
+
+            yield return OverlayTexture(outtex, shadowmap);
+            outtex = result;
+
+            mapWithoutFog = result;
+        }
 
         yield return StylizeFog(m_exploration);
         Color32[] fog = result;
@@ -197,35 +233,46 @@ public class MapImageGeneration
     {
         output = null;
 
-        yield return GenerateOceanTexture(m_heightmap, m_mapTexture);
-        Color32[] oceanTexture = result;
+        Color32[] outtex;
 
-        yield return AddPerlinNoise(oceanTexture, 4, 64);
-        oceanTexture = result;
+        if (mapWithoutFog != null)
+        {
+            outtex = mapWithoutFog;
+        }
+        else
+        {
+            yield return GenerateOceanTexture(m_heightmap);
+            Color32[] oceanTexture = result;
 
-        yield return ReplaceAbyssWithSpace(m_mapTexture, new Color32(0, 0, 0, 255));    //Replace void with Space texture
-        Color32[] outtex = result;
+            yield return AddPerlinNoise(oceanTexture, 4, 64);
+            oceanTexture = result;
 
-        yield return OverlayTexture(outtex, oceanTexture);
-        outtex = result;
+            yield return ReplaceAbyssWithColor(m_mapTexture, new Color32(0, 0, 0, 255), new Color32(255, 255, 255, 255));    // replace abyss with White
+            outtex = result;
 
-        yield return CreateShadowMap(m_heightmap, 23);
-        Color32[] shadowmap = result;
+            yield return OverlayTexture(outtex, oceanTexture);
+            outtex = result;
 
-        yield return DarkenTextureLinear(outtex, 20);
-        outtex = result;
+            //yield return CreateShadowMap(m_heightmap, 23);
+            //Color32[] shadowmap = result;
 
-        yield return ApplyForestMaskTexture(outtex, m_forestTexture);
-        outtex = result;
+            yield return DarkenTextureLinear(outtex, 20);
+            outtex = result;
 
-        yield return GenerateContourMap(m_heightmap, graduationHeight, 128);
-        Color32[] contours = result;
+            yield return ApplyForestMaskTexture(outtex, m_forestTexture);
+            outtex = result;
 
-        yield return OverlayTexture(outtex, contours);
-        outtex = result;
+            yield return GenerateContourMap(m_heightmap, graduationHeight, 128);
+            Color32[] contours = result;
 
-        yield return OverlayTexture(outtex, shadowmap);
-        outtex = result;
+            yield return OverlayTexture(outtex, contours);
+            outtex = result;
+
+            //yield return OverlayTexture(outtex, shadowmap);
+            //outtex = result;
+
+            mapWithoutFog = result;
+        }
 
         yield return StylizeFog(m_exploration);
         Color32[] fog = result;
@@ -477,6 +524,65 @@ public class MapImageGeneration
 
                 if (biomeColor[i] == Color.blue)
                     output[i] = Color32.Lerp(output[i], m_oceanColor, oceanLerpTarget);
+            }
+        });
+
+        internalThread.Start();
+        while (internalThread.IsAlive == true)
+        {
+            yield return null;
+        }
+
+        result = output;
+    }
+
+    private IEnumerator GenerateOceanTexture(Color32[] input)
+    {
+        Color32[] output     = new Color32[input.Length];
+        Color32   oceanColor = new Color32(20, 100, 255, 255);
+
+        var internalThread = new Thread(() =>
+        {
+            int divider = m_textureSize / 256;
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                if (!m_mapData[i])
+                    continue;
+
+                if (input[i].b <= 0)
+                {
+                    output[i] = Color.clear;  // above sea level
+                }
+                else
+                {
+                    int correction1 = ((i / m_textureSize) / divider) - 128;  // correction1 goes from -128 to 127
+                    int correction2 = ((i % m_textureSize) / divider) - 128;  // correction2 goes from -128 to 127
+                    int correction3 = ((correction1 * correction1) / 128) + ((correction2 * correction2) / 512);
+
+                    int alpha = (int)(input[i].b * 16) + 128;
+
+                    ref Color32 pixel = ref output[i];
+
+                    if (correction1 < 0)
+                    {
+                        //m_oceanColor = new Color32((byte)(10 + correction3), (byte)(136 - (correction3 / 4)), (byte)(193), (byte)(alpha > 255 ? 255 : alpha));        // South  83, 116, 196
+                        pixel.r = (byte)(10 + correction3);
+                        pixel.g = (byte)(136 - (correction3 / 4));
+                        pixel.b = (byte)(193);
+                    }
+                    else
+                    {
+                        //m_oceanColor = new Color32((byte)(10 + (correction3 / 2)), (byte)(136), (byte)(193 - (correction3 / 2)), (byte)(alpha > 255 ? 255 : alpha));  // North
+                        pixel.r = (byte)(10 + (correction3 / 2));
+                        pixel.g = (byte)(136);
+                        pixel.b = (byte)(193 - (correction3 / 2));
+                    }
+
+                    pixel.a = (byte)(alpha > 255 ? 255 : alpha);
+
+                    //output[i]. = m_oceanColor;
+                }
             }
         });
 
@@ -742,6 +848,7 @@ public class MapImageGeneration
                 {
                     float factor = 1f - (1f - forestColorFactor) * forestMask[i].r;
 
+                    // ?? we rewrite output[i].g later with (byte)(array[i].g * factor) 5 lines later => next two lines are useless
                     if (forestMask[i].g > 0f)
                         output[i].g = (byte)(array[i].g + (byte)(forestMask[i].g * forestMask[i].b * 255f));
 
