@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.1.4";
+        const string pluginVersion = "1.1.5";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -414,16 +414,16 @@ namespace NomapPrinter
             localFolder = config("Map storage", "Local folder", "", "Save and load map data from local folder. If relative path is set then the folder will be created at ...\\AppData\\LocalLow\\IronGate\\Valheim");
             sharedFile = config("Map storage", "Shared file", "", "Load map from the file name instead of generating one. File should be available on the server.");
 
-            mapType = config("Map style", "Map type", MapType.Chart, "Type of generated map. [Not Synced with Server]", false);
-            mapSize = config("Map style", "Map size", MapSize.Normal, "Resolution of generated map. More details means smoother lines but more data will be stored [Not Synced with Server]", false);
-            mapDefaultScale = config("Map style", "Map zoom default scale", 0.7f, "Default scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
-            mapMinimumScale = config("Map style", "Map zoom minimum scale", 0.25f, "Minimum scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
-            mapMaximumScale = config("Map style", "Map zoom maximum scale", 1.0f, "Maximum scale of opened map, more is closer, less is farther. [Not Synced with Server]", false);
+            mapType = config("Map style", "Map type", MapType.Chart, "Type of generated map");
+            mapSize = config("Map style", "Map size", MapSize.Normal, "Resolution of generated map. More details means smoother lines but more data will be stored");
+            mapDefaultScale = config("Map style", "Map zoom default scale", 0.7f, "Default scale of opened map, more is closer, less is farther.");
+            mapMinimumScale = config("Map style", "Map zoom minimum scale", 0.25f, "Minimum scale of opened map, more is closer, less is farther.");
+            mapMaximumScale = config("Map style", "Map zoom maximum scale", 1.0f, "Maximum scale of opened map, more is closer, less is farther.");
 
-            heightmapFactor = config("Map style extended", "Heightmap factor", 8, "Heightmap details factor [Not Synced with Server]", false);
-            graduationLinesDensity = config("Map style extended", "Graduation line density", 8, "Graduation lines density [Not Synced with Server]", false);
-            pinScale = config("Map style extended", "Pin scale", 1.0f, "Pin scale [Not Synced with Server]", false);
-            preserveSharedMapFog = config("Map style extended", "Preserve shared map fog tint for vanilla map", true, "Generate Vanilla map with shared map fog tint [Not Synced with Server]", false);
+            heightmapFactor = config("Map style extended", "Heightmap factor", 8, "Heightmap details factor");
+            graduationLinesDensity = config("Map style extended", "Graduation line density", 8, "Graduation lines density");
+            pinScale = config("Map style extended", "Pin scale", 1.0f, "Pin scale");
+            preserveSharedMapFog = config("Map style extended", "Preserve shared map fog tint for vanilla map", true, "Generate Vanilla map with shared map fog tint");
 
             messageStart = config("Messages", "Drawing begin", "Remembering travels...", "Center message when drawing is started. [Not Synced with Server]", false);
             messageSaving = config("Messages", "Drawing end", "Drawing map...", "Center message when saving file is started. [Not Synced with Server]", false);
@@ -894,6 +894,7 @@ namespace NomapPrinter
 
             Game.m_noMap = false;
 
+            Minimap.instance.inputDelay = 1f;
             Minimap.instance.SetMapMode(Minimap.MapMode.Large);
 
             Game.m_noMap = true;
@@ -1174,6 +1175,7 @@ namespace NomapPrinter
                     if (nomap)
                         Game.m_noMap = false;
 
+                    Minimap.instance.inputDelay = 0.5f;
                     Minimap.instance.SetMapMode(Minimap.MapMode.Large);
                     Minimap.instance.CenterMap(Vector3.zero);
 
