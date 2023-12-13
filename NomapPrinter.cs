@@ -512,14 +512,14 @@ namespace NomapPrinter
             pinScale = config("Map style extended", "Pin scale", 1.0f, "Pin scale");
             preserveSharedMapFog = config("Map style extended", "Preserve shared map fog tint for vanilla map", true, "Generate Vanilla map with shared map fog tint");
 
-            mapMaker             = xconfig("Map",              "Mapmaker",             Mapmaker.shudnal, "Scale of rendered map.",         false);
+            mapMaker             = configLocal("Map",              "Mapmaker",          Mapmaker.shudnal, "Scale of rendered map.");
 
-            mapScale             = xconfig("Mapmaker.zwiebaq", "mapScale",             MapScale.Double,  "Scale of rendered map.",         false);
-            mapStyle             = xconfig("Mapmaker.zwiebaq", "mapStyle",             MapStyle.Topo,    "Map rendering style.",           false);
-            mapHeightDivider     = xconfig("Mapmaker.zwiebaq", "mapHeightDivider",     256,              "Original height value divider.", false);
-            mapDepthDivider      = xconfig("Mapmaker.zwiebaq", "mapDepthDivider",      256,              "Original depth value divider.",  false);
-            mapContourInterval   = xconfig("Mapmaker.zwiebaq", "mapContourInterval",   8,                "Contour interval.",              false);
-            mapFetchOnlyExplored = xconfig("Mapmaker.zwiebaq", "mapFetchOnlyExplored", true,             "Fetch map data only for explored area.", false);
+            mapScale             = configLocal("Mapmaker.zwiebaq", "Scale",             MapScale.Double,  "Scale of rendered map.");
+            mapStyle             = configLocal("Mapmaker.zwiebaq", "Style",             MapStyle.Topo,    "Map rendering style.");
+            mapHeightDivider     = configLocal("Mapmaker.zwiebaq", "HeightDivider",     256,              "Original height value divider.");
+            mapDepthDivider      = configLocal("Mapmaker.zwiebaq", "DepthDivider",      256,              "Original depth value divider.");
+            mapContourInterval   = configLocal("Mapmaker.zwiebaq", "ContourInterval",   8,                "Contour interval.");
+            mapFetchOnlyExplored = configLocal("Mapmaker.zwiebaq", "FetchOnlyExplored", true,             "Fetch map data only for explored area.");
 
             messageStart = config("Messages", "Drawing begin", "Remembering travels...", "Center message when drawing is started. [Not Synced with Server]", false);
             messageSaving = config("Messages", "Drawing end", "Drawing map...", "Center message when saving file is started. [Not Synced with Server]", false);
@@ -581,6 +581,10 @@ namespace NomapPrinter
         ConfigEntry<T> config<T>(string group, string name, T defaultValue, string description, bool synchronizedSetting = true) => config(group, name, defaultValue, new ConfigDescription(description), synchronizedSetting);
 
         ConfigEntry<T> xconfig<T>(string group, string name, T defaultValue, string description, bool synchronizedSetting = true) => config(group, name, defaultValue, new ConfigDescription(description + (synchronizedSetting ? "" : " [Not Synced with Server]")), synchronizedSetting);
+
+        ConfigEntry<T> configSynced<T>(string group, string name, T defaultValue, string description) => xconfig(group, name, defaultValue, description);
+
+        ConfigEntry<T> configLocal<T>(string group, string name, T defaultValue, string description) => xconfig(group, name, defaultValue, description, false);
 
         private static void SetupMapFileWatcher()
         {
@@ -1117,10 +1121,11 @@ namespace NomapPrinter
 
             private static Texture2D noClouds;
 
-            private static Color m_deepNorthColor = new Color(0.85f, 0.85f, 1f);     // Blueish color
-            private static Color m_mistlandsColor = new Color(0.30f, 0.20f, 0.30f);
+            private static Color m_deepNorthColor = new Color(0.85f, 0.85f, 1.00f);  // Blueish color
+            private static Color m_mistlandsColor = new Color(0.60f, 0.40f, 0.60f);  // new Color(0.30f, 0.20f, 0.30f)
             private static Color m_noForestColor  = Color.clear;                     // new Color(0f, 0f, 0f, 0f);
             private static Color m_forestColor    = Color.red;                       // new Color(1f, 0f, 0f, 0f);
+            private static Color m_abyssColor     = Color.black;                     // ::= Color(0f, 0f, 0f, 1f);
 
             public IEnumerator Go()
             {
@@ -1218,7 +1223,7 @@ namespace NomapPrinter
                 working = false;
             }
 
-            public string GetMapFileDir()
+            private string GetMapFileDir()
             {
                 string path;
 
@@ -1236,7 +1241,7 @@ namespace NomapPrinter
                 return path;
             }
 
-            public string GetMapFileName(string tag = "")
+            private string GetMapFileName(string tag = "")
             {
                 //string playerName  = Player.m_localPlayer != null ? Player.m_localPlayer.GetPlayerName() : "w";
                 string worldName   = game_world != null ? game_world.m_name : "w";
@@ -1246,9 +1251,39 @@ namespace NomapPrinter
                 return $"valheim-map-{worldName}-{mapStyleStr}-{textureSize}{tag}.png";
             }
 
-            public string GetPlayerName()
+            private string GetPlayerName()
             {
                 return Player.m_localPlayer != null ? Player.m_localPlayer.GetPlayerName() : "x";
+            }
+
+            private Texture2D ReadMapTexture()
+            {
+                Texture2D texture = null;
+
+                string filename = Path.Combine(GetMapFileDir(), GetMapFileName());
+
+                if (!File.Exists(filename))
+                {
+                    Log($"[i] no map save file \"{filename}\" found");
+                }
+                else
+                {
+                    try
+                    {
+                        Log($"[i] loading map data from \"{filename}\"");
+                        texture = new Texture2D(textureSize, textureSize, TextureFormat.RGB24, false);
+                        texture.LoadImage(File.ReadAllBytes(filename));
+                        texture.Apply();
+                        //mapIsReady = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"[e] failed to load map: {ex}");
+                        texture = null;
+                    }
+                }
+
+                return texture;
             }
 
             public IEnumerator Go2()
@@ -1266,6 +1301,7 @@ namespace NomapPrinter
                 MapImageGeneration imageGen = new MapImageGeneration();
 
                 imageGen.mapWithoutFog = map?.GetPixels32(); // map != null ? map.GetPixels32() : null;
+                imageGen.m_abyssColor = m_abyssColor;
 
                 switch (mapStyle.Value)
                 {
@@ -1315,15 +1351,21 @@ namespace NomapPrinter
 
                             if (!mapIsReady && !mapFetchOnlyExplored.Value)
                             {
-                                fileName = Path.Combine(fileDir, GetMapFileName());  // Path.Combine(filepath, $"{fileNameKey}-clear.png");
+                                fileName = Path.Combine(fileDir, GetMapFileName());
                                 Log($"[i] saving clear map to file \"{fileName}\"");
                                 File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(map));
                                 mapIsReady = true;
                             }
 
-                            fileName = Path.Combine(fileDir, GetMapFileName(GetPlayerName()));  // Path.Combine(filepath, $"{fileNameKey}.png");
+                            fileName = Path.Combine(fileDir, GetMapFileName(GetPlayerName()));
                             Log($"[i] saving player map to file \"{fileName}\"");
                             File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(mapTexture));
+
+                            // ! debug +4
+                            Texture2D fogTexture = (Texture2D)Minimap.instance.m_mapImageLarge.material.GetTexture("_FogTex");
+                            fileName = Path.Combine(fileDir, GetMapFileName(GetPlayerName() + "-fog"));
+                            Log($"[i] saving player fog map to file \"{fileName}\"");
+                            File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(fogTexture));
                         }
                         catch (Exception e)
                         {
@@ -1458,7 +1500,7 @@ namespace NomapPrinter
 
                 Color32[] array  = new Color32[arraySize];  // texture {color}
                 Color[]   array2 = new Color[arraySize];    // forest  {bool}
-                Color32[] array3 = new Color32[arraySize];  // height  {float}
+                Color32[] array3 = new Color32[arraySize];  // height  {float}  TODO: switch to float[] or Color[] as byte range is not enough
                 //Color32[] array4 = new Color32[arraySize];  // fog     {bool}
 
                 bool[]    exploration = new bool[arraySize];
@@ -1469,36 +1511,15 @@ namespace NomapPrinter
                     if (!mapFetchOnlyExplored.Value)
                     {
                         for (int i = 0; i < arraySize; ++i)
-                        {
                             mapData[i] = true;
-                        }
 
                         if (saveMapToFile.Value)
                         {
                             if (map == null)
                             {
-                                string filename = Path.Combine(GetMapFileDir(), GetMapFileName());
-
-                                if (!File.Exists(filename))
-                                {
-                                    Log($"[i] no map save file \"{filename}\" found");
-                                }
-                                else
-                                {
-                                    try
-                                    {
-                                        Log($"[i] loading map data from \"{filename}\"");
-                                        map = new Texture2D(textureSize, textureSize, TextureFormat.RGB24, false);
-                                        map.LoadImage(File.ReadAllBytes(filename));
-                                        map.Apply();
-                                        mapIsReady = true;
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Log($"[e] failed to load map: {ex}");
-                                        map = null;
-                                    }
-                                }
+                                map = ReadMapTexture();
+                                if (map != null)
+                                    mapIsReady = true;
                             }
                         }
                     }
@@ -1530,13 +1551,10 @@ namespace NomapPrinter
 
                     if (map != null)
                     {
-                        for (int i = 0; i < textureSize; ++i)
+                        for (int i = 0, d = 0; i < textureSize; ++i, d += textureSize)
                         {
                             for (int j = 0; j < textureSize; ++j)
-                            {
-                                int pos = i * textureSize + j;
-                                exploration[pos] = IsExplored(j / scaleFactor, i / scaleFactor);
-                            }
+                                exploration[d + j] = IsExplored(j / scaleFactor, i / scaleFactor);
                         }
                     }
                     else
@@ -1554,14 +1572,13 @@ namespace NomapPrinter
 
                                 Heightmap.Biome biome       = WorldGenerator.instance.GetBiome(wx, wy);
                                 float           biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color mask);
+                                float           altitude    = biomeHeight - waterLevel;
 
-                                float height = biomeHeight - waterLevel;
-
-                                array2[n] = GetMaskColor(wx, wy, height, biome);  // -> forest
+                                array2[n] = GetMaskColor(wx, wy, altitude, biome);  // -> forest
 
                                 if (biomeHeight <= abyssBiomeHeight)
                                 {
-                                    array[n] = Color.black;  // off map biome color
+                                    array[n] = m_abyssColor;  // off map biome color
                                 }
                                 else
                                 {
@@ -1569,10 +1586,10 @@ namespace NomapPrinter
                                     array[n] = GetPixelColor(biome, biomeHeight);
 
                                     // Downscaled biome height as color
-                                    if (height > 0)
-                                        array3[n] = new Color(height / mapHeightDivider.Value, 0f, 0f);
+                                    if (altitude > 0)
+                                        array3[n] = new Color(altitude / mapHeightDivider.Value, 0f, 0f);
                                     else
-                                        array3[n] = new Color(0f, 0f, height / -mapDepthDivider.Value);
+                                        array3[n] = new Color(0f, 0f, altitude / -mapDepthDivider.Value);
 
                                     // Fog map and exploration data
                                     if (!mapFetchOnlyExplored.Value)
@@ -1857,7 +1874,7 @@ namespace NomapPrinter
             private static Color GetPixelColor(Heightmap.Biome biome, float height)
             {
                 if (height < abyssBiomeHeight)
-                    return Color.black;
+                    return m_abyssColor;
 
                 switch (biome)
                 {
@@ -1914,9 +1931,9 @@ namespace NomapPrinter
                 }
             }
 
-            private static Color GetMaskColor(float wx, float wy, float height, Heightmap.Biome biome)
+            private static Color GetMaskColor(float wx, float wy, float altitude, Heightmap.Biome biome)
             {
-                if (height < 0)
+                if (altitude < 0)
                     return m_noForestColor;
 
                 switch (biome)
