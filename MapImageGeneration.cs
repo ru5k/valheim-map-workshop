@@ -24,6 +24,8 @@ public class MapImageGeneration
     public static readonly Color32 yellowMap = new Color32(203, 155, 87, byte.MaxValue);
     public static readonly Color32 m_oceanColor = new Color32(20, 100, 255, byte.MaxValue);
 
+    public Color32 m_abyssColor = new Color32(0, 0, 0, byte.MaxValue);  // TODO: set this value on init by mapmaker
+
     public static void Initialize(Color32[] biomes, Color[] forests, Color32[] height, bool[] exploration, int texture_size, bool[] mapData)
     {
         m_mapTexture = biomes;
@@ -69,7 +71,8 @@ public class MapImageGeneration
         m_exploration = null;
         m_mapData = null;
     }
-    
+
+    // ? same same but different =) ::= GenerateChartMap(), but more yellowish and with slightly different brightness for forest. So, may be 'config' it?
     public IEnumerator GenerateOldMap(int graduationHeight)
     {
         output = null;
@@ -85,14 +88,16 @@ public class MapImageGeneration
             yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.25f);
             Color32[] oceanTexture = result;
 
-            yield return ReplaceAbyssWithColor(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
+            yield return ReplaceColor(m_mapTexture, m_abyssColor, yellowMap);    //Replace void with "Map colour"
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
             outtex = result;
 
+            // ? next 9 lines of code: -> LerpTextureWithColor(outtex, m_YellowColor, 3 /* times */) + check if alpha is 255 (max)
             yield return GetSolidColour(yellowMap);    //Yellowize map
             Color32[] offYellow = result;
+
             yield return LerpTextures(outtex, offYellow);
             outtex = result;
             yield return LerpTextures(outtex, offYellow);
@@ -139,7 +144,7 @@ public class MapImageGeneration
             yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.15f);
             Color32[] oceanTexture = result;
 
-            yield return ReplaceAbyssWithColor(m_mapTexture, new Color32(0, 0, 0, 255), yellowMap);    //Replace void with "Map colour"
+            yield return ReplaceColor(m_mapTexture, m_abyssColor, yellowMap);    //Replace void with "Map colour"
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
@@ -193,7 +198,7 @@ public class MapImageGeneration
             yield return AddPerlinNoise(oceanTexture, 4, 64);
             oceanTexture = result;
 
-            yield return ReplaceAbyssWithSpace(m_mapTexture, new Color32(0, 0, 0, 255));    //Replace void with Space texture
+            yield return ReplaceColorWithSpace(m_mapTexture, m_abyssColor);    //Replace void with Space texture
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
@@ -247,7 +252,7 @@ public class MapImageGeneration
             yield return AddPerlinNoise(oceanTexture, 4, 64);
             oceanTexture = result;
 
-            yield return ReplaceAbyssWithColor(m_mapTexture, new Color32(0, 0, 0, 255), new Color32(255, 255, 255, 255));    // replace abyss with White
+            yield return ReplaceColor(m_mapTexture, m_abyssColor, Color.white);
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
@@ -562,7 +567,7 @@ public class MapImageGeneration
 
                     int alpha = (int)(input[i].b * 16) + 128;
 
-                    ref Color32 pixel = ref output[i];
+                    Color32 pixel = output[i];
 
                     if (correction1 < 0)
                     {
@@ -632,9 +637,11 @@ public class MapImageGeneration
         {
             for (int i = 0; i < m_textureSize * m_textureSize; i++)
             {
-                if (!exploration[i])
+                Color32 tp = m_mapTexture[i];
+                Color32 np = noise[i];
+                if (!exploration[i] && !(tp.r == m_abyssColor.r && tp.g == m_abyssColor.g && tp.b == m_abyssColor.b && tp.a == m_abyssColor.a))
                 {
-                    output[i] = new Color32((byte)(203 + (noise[i].r - 128)), (byte)(155 + (noise[i].g - 128)), (byte)(87 + (noise[i].b - 128)), 255);
+                    output[i] = new Color32((byte)(203 + (np.r - 128)), (byte)(155 + (np.g - 128)), (byte)(87 + (np.b - 128)), 255);
                 }
             }
         });
@@ -772,7 +779,7 @@ public class MapImageGeneration
         result = array;
     }
 
-    private IEnumerator ReplaceAbyssWithColor(Color32[] input, Color32 from, Color32 to)
+    private IEnumerator ReplaceColor(Color32[] input, Color32 from, Color32 to)
     {
         Color32[] output = new Color32[input.Length];
 
@@ -780,12 +787,12 @@ public class MapImageGeneration
         {
             for (int i = 0; i < input.Length; i++)
             {
-                if (!m_mapData[i])
-                    output[i] = to;
-                else if((input[i].r == from.r) && (input[i].g == from.g) && (input[i].b == from.b)) 
+                Color32 ip = input[i];
+
+                if (/*!m_mapData[i] ||*/ (ip.r == from.r && ip.g == from.g && ip.b == from.b))
                     output[i] = to;
                 else
-                    output[i] = input[i];
+                    output[i] = ip;
             }
         });
 
@@ -797,26 +804,27 @@ public class MapImageGeneration
         result = output;
     }
 
-    private IEnumerator ReplaceAbyssWithSpace(Color32[] input, Color32 from)
+    private IEnumerator ReplaceColorWithSpace(Color32[] input, Color32 from)
     {
         Color32[] output = new Color32[input.Length];
 
         var internalThread = new Thread(() =>
         {
-            for (int x = 0; x < m_textureSize; x++)
+            for (int x = 0, d = 0; x < m_textureSize; ++x, d += m_textureSize)
             {
-                for (int y = 0; y < m_textureSize; y++)
+                for (int y = 0; y < m_textureSize; ++y)
                 {
-                    int pos = x * m_textureSize + y;
+                    int pos = d + y;
+                    Color32 ip = input[pos];
 
-                    if (!m_mapData[pos])
-                        output[pos] = space[x % spaceRes * spaceRes + y % spaceRes];
-                    else if ((input[pos].r == from.r) && (input[pos].g == from.g) && (input[pos].b == from.b))
+                    if (/*!m_mapData[pos] ||*/ (ip.r == from.r && ip.g == from.g && ip.b == from.b))
                     {
                         output[pos] = space[x % spaceRes * spaceRes + y % spaceRes];
                     }
                     else
-                        output[pos] = input[pos];
+                    {
+                        output[pos] = ip;
+                    }
                 }
             }
         });
@@ -849,8 +857,8 @@ public class MapImageGeneration
                     float factor = 1f - (1f - forestColorFactor) * forestMask[i].r;
 
                     // ?? we rewrite output[i].g later with (byte)(array[i].g * factor) 5 lines later => next two lines are useless
-                    if (forestMask[i].g > 0f)
-                        output[i].g = (byte)(array[i].g + (byte)(forestMask[i].g * forestMask[i].b * 255f));
+                    //if (forestMask[i].g > 0f)
+                    //    output[i].g = (byte)(array[i].g + (byte)(forestMask[i].g * forestMask[i].b * 255f));
 
                     output[i].r = (byte)(array[i].r * factor);
                     output[i].g = (byte)(array[i].g * factor);
