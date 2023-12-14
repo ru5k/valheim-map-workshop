@@ -19,7 +19,7 @@ namespace NomapPrinter
     {
         const string pluginID = "shudnal.NomapPrinter";
         const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.1.5";
+        const string pluginVersion = "1.1.6";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 

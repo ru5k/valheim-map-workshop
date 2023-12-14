@@ -60,6 +60,13 @@ https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationMa
 
 ## Changelog
 
+v 1.1.6
+* patch 0.217.38
+
+v 1.1.5
+* fixed creating pin on interactive map showing
+* map style server synced
+
 v 1.1.4
 * error fix
 
