@@ -23,9 +23,9 @@ public class MapImageGeneration
     public Color32[] mapWithoutFog = null;
 
     public static readonly Color32 yellowMap = new Color32(203, 155, 87, byte.MaxValue);
-    public static readonly Color32 m_oceanColor = new Color32(20, 100, 255, byte.MaxValue);
+    private static readonly Color32 s_oceanColor = new Color32(20, 100, 255, byte.MaxValue);
 
-    public Color32 m_abyssColor = new Color32(0, 0, 0, byte.MaxValue);  // TODO: set this value on init by mapmaker
+    public Color32 abyssColor = new Color32(0, 0, 0, byte.MaxValue);  // TODO: set this value on init by mapmaker
 
     public static void Initialize(Color32[] biomes, Color[] forests, Color32[] height, bool[] exploration, int texture_size, bool[] mapData)
     {
@@ -90,7 +90,7 @@ public class MapImageGeneration
             yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.25f);
             Color32[] oceanTexture = result;
 
-            yield return ReplaceColor(m_mapTexture, m_abyssColor, yellowMap);    //Replace void with "Map colour"
+            yield return ReplaceColor(m_mapTexture, abyssColor, yellowMap);    //Replace void with "Map colour"
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
@@ -146,7 +146,7 @@ public class MapImageGeneration
             yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.15f);
             Color32[] oceanTexture = result;
 
-            yield return ReplaceColor(m_mapTexture, m_abyssColor, yellowMap);    //Replace void with "Map colour"
+            yield return ReplaceColor(m_mapTexture, abyssColor, yellowMap);    //Replace void with "Map colour"
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
@@ -200,7 +200,7 @@ public class MapImageGeneration
             yield return AddPerlinNoise(oceanTexture, 4, 64);
             oceanTexture = result;
 
-            yield return ReplaceColorWithSpace(m_mapTexture, m_abyssColor);    //Replace void with Space texture
+            yield return ReplaceColorWithSpace(m_mapTexture, abyssColor);    //Replace void with Space texture
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
@@ -254,7 +254,7 @@ public class MapImageGeneration
             yield return AddPerlinNoise(oceanTexture, 4, 64);
             oceanTexture = result;
 
-            yield return ReplaceColor(m_mapTexture, m_abyssColor, Color.white);
+            yield return ReplaceColor(m_mapTexture, abyssColor, Color.white);
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
@@ -530,7 +530,7 @@ public class MapImageGeneration
                 output[i].a = (byte)Math.Min((input[i].b * 16) + 128, 255);
 
                 if (biomeColor[i] == Color.blue)
-                    output[i] = Color32.Lerp(output[i], m_oceanColor, oceanLerpTarget);
+                    output[i] = Color32.Lerp(output[i], s_oceanColor, oceanLerpTarget);
             }
         });
 
@@ -630,20 +630,32 @@ public class MapImageGeneration
 
     private IEnumerator StylizeFog(bool[] exploration)
     {
-
         yield return GetPerlin(128, 16);
         Color32[] noise = result;
-        Color32[] output = new Color32[m_textureSize * m_textureSize];
+        Color32[] fog = new Color32[m_textureSize * m_textureSize];
 
         var internalThread = new Thread(() =>
         {
-            for (int i = 0; i < m_textureSize * m_textureSize; i++)
+            if (s_worldMask == null)
             {
-                Color32 tp = m_mapTexture[i];
-                Color32 np = noise[i];
-                if (!exploration[i] && !(tp.r == m_abyssColor.r && tp.g == m_abyssColor.g && tp.b == m_abyssColor.b && tp.a == m_abyssColor.a))
+                for (int i = 0; i < m_textureSize * m_textureSize; i++)
                 {
-                    output[i] = new Color32((byte)(203 + (np.r - 128)), (byte)(155 + (np.g - 128)), (byte)(87 + (np.b - 128)), 255);
+                    ref Color32 np = ref noise[i];
+                    if (!exploration[i])
+                    {
+                        fog[i] = new Color32((byte)(203 + (np.r - 128)), (byte)(155 + (np.g - 128)), (byte)(87 + (np.b - 128)), 255);
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < m_textureSize * m_textureSize; i++)
+                {
+                    ref Color32 np = ref noise[i];
+                    if (!exploration[i] && s_worldMask[i].a > 0)
+                    {
+                        fog[i] = new Color32((byte)(203 + (np.r - 128)), (byte)(155 + (np.g - 128)), (byte)(87 + (np.b - 128)), 255);
+                    }
                 }
             }
         });
@@ -653,7 +665,7 @@ public class MapImageGeneration
         {
             yield return null;
         }
-        result = output;
+        result = fog;
     }
 
     private IEnumerator GenerateContourMap(Color32[] start, int graduations, byte alpha)
