@@ -8,6 +8,7 @@ public class MapImageGeneration
     private static Color32[] m_mapTexture;
     private static Color[] m_forestTexture;
     private static Color32[] m_heightmap;
+    public  static Color32[] s_worldMask;
     private static bool[] m_exploration;
     private static bool[] m_mapData;
     private static int m_textureSize;
@@ -70,6 +71,7 @@ public class MapImageGeneration
         m_heightmap = null;
         m_exploration = null;
         m_mapData = null;
+        s_worldMask = null;
     }
 
     // ? same same but different =) ::= GenerateChartMap(), but more yellowish and with slightly different brightness for forest. So, may be 'config' it?
@@ -567,7 +569,7 @@ public class MapImageGeneration
 
                     int alpha = (int)(input[i].b * 16) + 128;
 
-                    Color32 pixel = output[i];
+                    ref Color32 pixel = ref output[i];
 
                     if (correction1 < 0)
                     {
