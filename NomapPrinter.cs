@@ -139,9 +139,13 @@ namespace NomapPrinter
         // mapTexture::isReady -> do we need this?
         private static bool mapTextureIsReady = false;
 
-        private static Texture2D map;                // new Texture2D(4096, 4096, TextureFormat.RGB24, false);
-        private static Texture2D s_worldMask;
-        private static bool      mapIsReady = false;
+        public static Texture2D map         = new Texture2D(4096, 4096, TextureFormat.RGB24, false);
+        private static bool     s_mapIsReady  = false;
+        public static Texture2D s_worldMask = new Texture2D(4096, 4096, TextureFormat.RGB24, false);
+        private static bool     s_worldMaskIsReady = false;
+        private static bool     mapIsSaved  = false;
+
+        private static readonly string s_worldMaskTag = "world-mask";
 
         //
         // -- custom in game map view/show/display
@@ -767,6 +771,80 @@ namespace NomapPrinter
             return false;
         }
 
+        private static bool ReadMapTexture(ref Texture2D texture, string tag = "")
+        {
+            //Texture2D texture = null;
+
+            string filename = Path.Combine(GetMapFileDir(), GetMapFileName(tag));
+
+            if (!File.Exists(filename))
+            {
+                Log($"[i] failed to find map save file \"{filename}\"");
+            }
+            else
+            {
+                try
+                {
+                    Log($"[i] loading map data from \"{filename}\"");
+                    //Log($"[d] texture size is {textureSize}");
+                    //texture = new Texture2D(textureSize, textureSize, TextureFormat.RGB24, false);
+                    Log($"[d] created texture");
+                    Thread.Sleep(5000);
+                    texture.LoadImage(File.ReadAllBytes(filename));
+                    Log($"[d] laded image");
+                    Thread.Sleep(5000);
+                    texture.Apply();
+                    Log($"[d] applied texture");
+                    Thread.Sleep(5000);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Log($"[e] failed to load map: {ex}");
+                    //texture = null;
+                }
+            }
+
+            return false; // texture;
+        }
+
+        private static string GetMapFileDir()
+        {
+            string path;
+
+            if (filePath.Value.IsNullOrWhiteSpace())
+            {
+                path = Path.Combine(localPath, "map");
+            }
+            else
+            {
+                path = filePath.Value;
+            }
+
+            //Directory.CreateDirectory(path);
+
+            return path;
+        }
+
+        private static string GetMapFileName(string tag = "")
+        {
+            int scaleFactor = (int)mapScale.Value;
+
+            int textureSize = scaleFactor * Minimap.instance.m_textureSize;
+
+            //string playerName  = Player.m_localPlayer != null ? Player.m_localPlayer.GetPlayerName() : "w";
+            string worldName = game_world != null ? game_world.m_name : "w";
+            string mapStyleStr = mapStyle.Value.ToString().ToLower();
+            if (tag.Length > 0)
+                tag = "-" + tag;
+            return $"valheim-map-{worldName}-{mapStyleStr}-{textureSize}{tag}.png";
+        }
+
+        private static string GetPlayerName()
+        {
+            return Player.m_localPlayer != null ? Player.m_localPlayer.GetPlayerName() : "x";
+        }
+
         private static bool LoadMapFromPlayer(Player player)
         {
             if (!modEnabled.Value)
@@ -777,6 +855,32 @@ namespace NomapPrinter
 
             if (player != Player.m_localPlayer)
                 return false;
+
+            if (saveMapToFile.Value)
+            {
+                if (!s_mapIsReady)
+                {
+                    Log($"[d] map is null - trying to load map from file");
+                    s_mapIsReady = ReadMapTexture(ref map);
+                    Log($"[i] loaded map data from file ({s_mapIsReady})");
+                    Thread.Sleep(5000);
+                }
+
+                if (!s_worldMaskIsReady)
+                {
+                    Log($"[d] world mask is null - trying to load world mask from file");
+                    s_worldMaskIsReady = ReadMapTexture(ref s_worldMask, s_worldMaskTag);
+                    Log($"[i] loaded world mask data from file ({s_worldMaskIsReady})");
+                    Thread.Sleep(5000);
+                }
+
+                if (s_mapIsReady && s_worldMaskIsReady)
+                {
+                    Log($"[i] map and world mask are ready");
+                    mapIsSaved = true;
+                    //worldMask = s_worldMask.GetPixels32();
+                }
+            }
 
             if (LoadMapFromLocalFile(player))
                 return true;
@@ -1226,67 +1330,6 @@ namespace NomapPrinter
                 working = false;
             }
 
-            private string GetMapFileDir()
-            {
-                string path;
-
-                if (filePath.Value.IsNullOrWhiteSpace())
-                {
-                    path = Path.Combine(localPath, "map");
-                }
-                else
-                {
-                    path = filePath.Value;
-                }
-
-                //Directory.CreateDirectory(path);
-
-                return path;
-            }
-
-            private string GetMapFileName(string tag = "")
-            {
-                //string playerName  = Player.m_localPlayer != null ? Player.m_localPlayer.GetPlayerName() : "w";
-                string worldName   = game_world != null ? game_world.m_name : "w";
-                string mapStyleStr = mapStyle.Value.ToString().ToLower();
-                if (tag.Length > 0)
-                    tag = "-" + tag;
-                return $"valheim-map-{worldName}-{mapStyleStr}-{textureSize}{tag}.png";
-            }
-
-            private string GetPlayerName()
-            {
-                return Player.m_localPlayer != null ? Player.m_localPlayer.GetPlayerName() : "x";
-            }
-
-            private Texture2D ReadMapTexture(string tag = "")
-            {
-                Texture2D texture = null;
-
-                string filename = Path.Combine(GetMapFileDir(), GetMapFileName(tag));
-
-                if (!File.Exists(filename))
-                {
-                    Log($"[i] no map save file \"{filename}\" found");
-                }
-                else
-                {
-                    try
-                    {
-                        Log($"[i] loading map data from \"{filename}\"");
-                        texture = new Texture2D(textureSize, textureSize, TextureFormat.RGB24, false);
-                        texture.LoadImage(File.ReadAllBytes(filename));
-                        texture.Apply();
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"[e] failed to load map: {ex}");
-                        texture = null;
-                    }
-                }
-
-                return texture;
-            }
 
             public IEnumerator Go2()
             {
@@ -1303,7 +1346,7 @@ namespace NomapPrinter
 
                 MapImageGeneration imageGen = new MapImageGeneration
                 {
-                    mapWithoutFog = map?.GetPixels32(),  // map != null ? map.GetPixels32() : null;
+                    mapWithoutFog = s_mapIsReady ? map.GetPixels32() : null,  // map != null ? map.GetPixels32() : null;
                     abyssColor = m_abyssColor
                 };
 
@@ -1327,16 +1370,14 @@ namespace NomapPrinter
 
                 if (saveMapToFile.Value)
                 {
-                    if (!map)
+                    if (!s_mapIsReady)
                     {
-                        map = new Texture2D(textureSize, textureSize, TextureFormat.RGB24, false);
+                        //map = new Texture2D(textureSize, textureSize, TextureFormat.RGB24, false);
+                        if (map.width != textureSize || map.height != textureSize)
+                            map.Reinitialize(textureSize, textureSize, TextureFormat.RGB24, false);
                         map.SetPixels32(imageGen.mapWithoutFog);
                         map.Apply();
-                    }
-                    else
-                    {
-                        //if (map.width != textureSize || map.height != textureSize)
-                        //    map.Reinitialize(textureSize, textureSize, TextureFormat.RGB24, false);
+                        s_mapIsReady = true;
                     }
 
                     if (!s_worldMask)
@@ -1360,17 +1401,17 @@ namespace NomapPrinter
 
                             Directory.CreateDirectory(fileDir);
 
-                            if (!mapIsReady && !mapFetchOnlyExplored.Value)
+                            if (!mapIsSaved && !mapFetchOnlyExplored.Value)
                             {
                                 fileName = Path.Combine(fileDir, GetMapFileName());
                                 Log($"[i] saving clear map to file \"{fileName}\"");
                                 File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(map));
 
-                                fileName = Path.Combine(fileDir, GetMapFileName("-world-mask"));
+                                fileName = Path.Combine(fileDir, GetMapFileName(s_worldMaskTag));
                                 Log($"[i] saving world mask to file \"{fileName}\"");
                                 File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(s_worldMask));
 
-                                mapIsReady = true;
+                                mapIsSaved = true;
                             }
 
                             fileName = Path.Combine(fileDir, GetMapFileName(GetPlayerName()));
@@ -1532,14 +1573,31 @@ namespace NomapPrinter
 
                         if (saveMapToFile.Value)
                         {
-                            if (!map)
-                                map = ReadMapTexture();
+                            /*
+                            if (!s_mapIsReady)
+                            {
+                                Log($"[d] map is null - trying to load map from file");
+                                //map = ReadMapTexture();
+                                s_mapIsReady = ReadMapTexture(ref map);
+                                Log($"[i] loaded map data from file ({s_mapIsReady})");
+                                Thread.Sleep(5000);
+                            }
 
-                            if (!s_worldMask)
-                                s_worldMask = ReadMapTexture("-world-mask");
-
-                            if (map && s_worldMask)
-                                mapIsReady = true;
+                            if (!s_worldMaskIsReady)
+                            {
+                                Log($"[d] world mask is null - trying to load world mask from file");
+                                //s_worldMask = ReadMapTexture(s_worldMaskTag);
+                                s_worldMaskIsReady = ReadMapTexture(ref s_worldMask, s_worldMaskTag);
+                                Log($"[i] loaded world mask data from file ({s_worldMaskIsReady})");
+                                Thread.Sleep(5000);
+                            }
+                            */
+                            if (s_mapIsReady && s_worldMaskIsReady)
+                            {
+                                Log($"[i] map and world mask are ready");
+                                //mapIsSaved = true;
+                                worldMask = s_worldMask.GetPixels32();
+                            }
                         }
                     }
                     else
@@ -1568,7 +1626,7 @@ namespace NomapPrinter
                         }
                     }
 
-                    if (mapIsReady)
+                    if (mapIsSaved)
                     {
                         for (int i = 0, d = 0; i < textureSize; ++i, d += textureSize)
                         {
@@ -1615,10 +1673,13 @@ namespace NomapPrinter
                                     // Fog map and exploration data
                                     if (!mapFetchOnlyExplored.Value)
                                     {
-                                        Color pixel = fogTexture.GetPixel(j / scaleFactor, i / scaleFactor);
-                                        bool isFog = pixel.r != 0f && (!showSharedMap.Value || pixel.g != 0f);
-                                        exploration[n] = !isFog;
+                                        //Color pixel = fogTexture.GetPixel(j / scaleFactor, i / scaleFactor);
+                                        //bool isFog = pixel.r != 0f && (!showSharedMap.Value || pixel.g != 0f);
+                                        //exploration[n] = !isFog;
+
                                         //array4[n] = isFog ? Color.gray : Color.clear;
+
+                                        exploration[n] = IsExplored(j / scaleFactor, i / scaleFactor);
                                     }
                                 }
 
@@ -1637,6 +1698,7 @@ namespace NomapPrinter
                 m_forestTexture = array2;
                 m_heightmap     = array3;
                 //m_fogmap        = array4;
+
                 s_worldMaskTexture = worldMask;
 
                 m_exploration   = exploration;
