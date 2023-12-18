@@ -8,7 +8,6 @@ public class MapImageGeneration
     private static Color32[] m_mapTexture;
     private static Color[] m_forestTexture;
     private static Color32[] m_heightmap;
-    public  static Color32[] s_worldMask;
     private static bool[] m_exploration;
     private static bool[] m_mapData;
     private static int m_textureSize;
@@ -20,12 +19,13 @@ public class MapImageGeneration
     private Color32[] result;
     public Color32[] output;
 
-    public Color32[] mapWithoutFog = null;
+    public Color32[] WorldMap;
+    public Color32[] WorldMask;
 
     public static readonly Color32 yellowMap = new Color32(203, 155, 87, byte.MaxValue);
-    private static readonly Color32 s_oceanColor = new Color32(20, 100, 255, byte.MaxValue);
+    private static readonly Color32 OceanColor = new Color32(20, 100, 255, byte.MaxValue);
 
-    public Color32 abyssColor = new Color32(0, 0, 0, byte.MaxValue);  // TODO: set this value on init by mapmaker
+    public Color32 AbyssColor = new Color32(0, 0, 0, byte.MaxValue);
 
     public static void Initialize(Color32[] biomes, Color[] forests, Color32[] height, bool[] exploration, int texture_size, bool[] mapData)
     {
@@ -71,7 +71,6 @@ public class MapImageGeneration
         m_heightmap = null;
         m_exploration = null;
         m_mapData = null;
-        s_worldMask = null;
     }
 
     // ? same same but different =) ::= GenerateChartMap(), but more yellowish and with slightly different brightness for forest. So, may be 'config' it?
@@ -81,16 +80,16 @@ public class MapImageGeneration
 
         Color32[] outtex;
 
-        if (mapWithoutFog != null)
+        if (WorldMap != null)
         {
-            outtex = mapWithoutFog;
+            outtex = WorldMap;
         }
         else
         {
             yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.25f);
             Color32[] oceanTexture = result;
 
-            yield return ReplaceColor(m_mapTexture, abyssColor, yellowMap);    //Replace void with "Map colour"
+            yield return ReplaceColor(m_mapTexture, AbyssColor, yellowMap);    //Replace void with "Map colour"
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
@@ -119,7 +118,7 @@ public class MapImageGeneration
             yield return OverlayTexture(outtex, contours);
             outtex = result;
 
-            mapWithoutFog = result;
+            WorldMap = result;
         }
 
         yield return StylizeFog(m_exploration);
@@ -137,16 +136,16 @@ public class MapImageGeneration
 
         Color32[] outtex;
 
-        if (mapWithoutFog != null)
+        if (WorldMap != null)
         {
-            outtex = mapWithoutFog;
+            outtex = WorldMap;
         }
         else
         {
             yield return GenerateOceanTexture(m_heightmap, m_mapTexture, 0.15f);
             Color32[] oceanTexture = result;
 
-            yield return ReplaceColor(m_mapTexture, abyssColor, yellowMap);    //Replace void with "Map colour"
+            yield return ReplaceColor(m_mapTexture, AbyssColor, yellowMap);    //Replace void with "Map colour"
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
@@ -170,7 +169,7 @@ public class MapImageGeneration
             yield return OverlayTexture(outtex, contours);
             outtex = result;
 
-            mapWithoutFog = result;
+            WorldMap = result;
         }
 
         yield return StylizeFog(m_exploration);
@@ -188,9 +187,9 @@ public class MapImageGeneration
 
         Color32[] outtex;
 
-        if (mapWithoutFog != null)
+        if (WorldMap != null)
         {
-            outtex = mapWithoutFog;
+            outtex = WorldMap;
         }
         else
         {
@@ -200,7 +199,7 @@ public class MapImageGeneration
             yield return AddPerlinNoise(oceanTexture, 4, 64);
             oceanTexture = result;
 
-            yield return ReplaceColorWithSpace(m_mapTexture, abyssColor);    //Replace void with Space texture
+            yield return ReplaceColorWithSpace(m_mapTexture, AbyssColor);    //Replace void with Space texture
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
@@ -224,7 +223,7 @@ public class MapImageGeneration
             yield return OverlayTexture(outtex, shadowmap);
             outtex = result;
 
-            mapWithoutFog = result;
+            WorldMap = result;
         }
 
         yield return StylizeFog(m_exploration);
@@ -242,9 +241,9 @@ public class MapImageGeneration
 
         Color32[] outtex;
 
-        if (mapWithoutFog != null)
+        if (WorldMap != null)
         {
-            outtex = mapWithoutFog;
+            outtex = WorldMap;
         }
         else
         {
@@ -254,7 +253,7 @@ public class MapImageGeneration
             yield return AddPerlinNoise(oceanTexture, 4, 64);
             oceanTexture = result;
 
-            yield return ReplaceColor(m_mapTexture, abyssColor, Color.white);
+            yield return ReplaceColor(m_mapTexture, AbyssColor, Color.white);
             outtex = result;
 
             yield return OverlayTexture(outtex, oceanTexture);
@@ -278,7 +277,7 @@ public class MapImageGeneration
             //yield return OverlayTexture(outtex, shadowmap);
             //outtex = result;
 
-            mapWithoutFog = result;
+            WorldMap = result;
         }
 
         yield return StylizeFog(m_exploration);
@@ -530,7 +529,7 @@ public class MapImageGeneration
                 output[i].a = (byte)Math.Min((input[i].b * 16) + 128, 255);
 
                 if (biomeColor[i] == Color.blue)
-                    output[i] = Color32.Lerp(output[i], s_oceanColor, oceanLerpTarget);
+                    output[i] = Color32.Lerp(output[i], OceanColor, oceanLerpTarget);
             }
         });
 
@@ -636,7 +635,7 @@ public class MapImageGeneration
 
         var internalThread = new Thread(() =>
         {
-            if (s_worldMask == null)
+            if (WorldMask == null)
             {
                 for (int i = 0; i < m_textureSize * m_textureSize; i++)
                 {
@@ -652,7 +651,7 @@ public class MapImageGeneration
                 for (int i = 0; i < m_textureSize * m_textureSize; i++)
                 {
                     ref Color32 np = ref noise[i];
-                    if (!exploration[i] && s_worldMask[i].a > 0)
+                    if (!exploration[i] && WorldMask[i].a > 0)
                     {
                         fog[i] = new Color32((byte)(203 + (np.r - 128)), (byte)(155 + (np.g - 128)), (byte)(87 + (np.b - 128)), 255);
                     }
