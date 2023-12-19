@@ -298,7 +298,7 @@ public class MapImageGeneration
         {
             for (int i = 0; i < (m_textureSize * m_textureSize); i++)
             {
-                if (!allMap && !m_mapData[i])
+                if (!allMap && m_mapData != null && !m_mapData[i])
                     continue;
 
                 float a = ((Color)array2[i]).a;
@@ -328,7 +328,7 @@ public class MapImageGeneration
         {
             for (int i = 0; i < (m_textureSize * m_textureSize); i++)
             {
-                if (!m_mapData[i])
+                if (m_mapData != null && !m_mapData[i])
                     continue;
 
                 int a = array2[i].a - array1[i].a;
@@ -361,7 +361,7 @@ public class MapImageGeneration
         {
             for (int i = 0; i < m_textureSize * m_textureSize; i++)
             {
-                if (!m_mapData[i])
+                if (m_mapData != null && !m_mapData[i])
                     continue;
 
                 int bit;
@@ -413,7 +413,8 @@ public class MapImageGeneration
                 for (int j = 0; j < m_textureSize; j++)
                 {
                     int pos = i * m_textureSize + j;
-                    if (!m_mapData[pos])
+
+                    if (m_mapData != null && !m_mapData[pos])
                         continue;
 
                     int pixel;
@@ -461,7 +462,8 @@ public class MapImageGeneration
                 for (int j = 0; j < m_textureSize; j++)
                 {
                     int pos = i * m_textureSize + j;
-                    if (!m_mapData[pos])
+
+                    if (m_mapData != null && !m_mapData[pos])
                         continue;
 
                     if (shaded[pos] == false)
@@ -499,7 +501,7 @@ public class MapImageGeneration
         {
             for (int i = 0; i < m_textureSize * m_textureSize; i++)
             {
-                if (!m_mapData[i])
+                if (m_mapData != null && !m_mapData[i])
                     continue;
 
                 if (input[i].b == 0)
@@ -553,7 +555,7 @@ public class MapImageGeneration
 
             for (int i = 0; i < input.Length; i++)
             {
-                if (!m_mapData[i])
+                if (m_mapData != null && !m_mapData[i])
                     continue;
 
                 if (input[i].b <= 0)
@@ -677,8 +679,12 @@ public class MapImageGeneration
 
         var internalThread = new Thread(() =>
         {
+            // ! -> input = Array.ConvertAll(start, x => x.b > 0 ? 0 : Math.Min(x.r + graduations, 255));
+
             for (int i = 0; i < (m_textureSize * m_textureSize); i++)    //Shift height values up by graduation so that coast is outlined with a contour line
             {
+                // ! actually start[i].r > 0 always when above sea level, and start[i].b >= 0 for the rest of the map
+                // => start[i].r is undefined (has default value) where start[i].b == 0
                 int newR = (start[i].b > 0) ? 0 : Math.Min(start[i].r + graduations, 255);
                 input[i].r = (byte)newR;
             }
@@ -692,7 +698,7 @@ public class MapImageGeneration
                     int heightRef = input[yCoord + x].r / graduations;      //Which graduation does the height under test fall under?
                     output[testCoord] = Color.clear;     //Default color is clear
 
-                    if (!m_mapData[testCoord])
+                    if (m_mapData != null && !m_mapData[testCoord])
                         continue;
 
                     for (int i = -1; i < 2; i++)
@@ -749,7 +755,7 @@ public class MapImageGeneration
                 {
                     int pos = x * m_textureSize + y;
 
-                    if (!m_mapData[pos])
+                    if (m_mapData != null && !m_mapData[pos])
                         continue;
 
                     Color start = input[pos];
@@ -777,7 +783,7 @@ public class MapImageGeneration
         {
             for (int i = 0; i < array.Length; i++)
             {
-                if (!m_mapData[i])
+                if (m_mapData != null && !m_mapData[i])
                     continue;
 
                 array[i] = TexColour;
@@ -858,7 +864,7 @@ public class MapImageGeneration
         {
             for (int i = 0; i < m_textureSize * m_textureSize; i++)
             {
-                if (!m_mapData[i])
+                if (m_mapData != null && !m_mapData[i])
                     continue;
 
                 if (forestMask[i].r == 0f)
