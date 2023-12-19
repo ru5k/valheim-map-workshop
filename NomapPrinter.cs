@@ -55,13 +55,13 @@ namespace NomapPrinter
         private static ConfigEntry<float> mapMinimumScale;
         private static ConfigEntry<float> mapMaximumScale;
 
-        private static ConfigEntry<Mapmaker> mapMaker;             // to not mess the code
-        private static ConfigEntry<MapStyle> mapStyle;
-        private static ConfigEntry<MapScale> mapScale;
-        private static ConfigEntry<int>      mapHeightDivider;
-        private static ConfigEntry<int>      mapDepthDivider;
-        private static ConfigEntry<int>      mapContourInterval;
-        private static ConfigEntry<bool>     mapFetchOnlyExplored;
+        private static ConfigEntry<Mapmaker> _mapMaker;             // to not mess the code
+        private static ConfigEntry<MapStyle> _mapStyle;
+        private static ConfigEntry<MapScale> _mapScale;
+        private static ConfigEntry<int>      _mapHeightDivider;
+        private static ConfigEntry<int>      _mapDepthDivider;
+        private static ConfigEntry<int>      _mapContourInterval;
+        private static ConfigEntry<bool>     _mapFetchOnlyExplored;
 
         private static ConfigEntry<int> heightmapFactor;
         private static ConfigEntry<int> graduationLinesDensity;
@@ -195,7 +195,7 @@ namespace NomapPrinter
 
         private enum MapStyle
         {
-            Paint,
+            Aerial,
             Topo,
             Chart,
             Ink
@@ -520,14 +520,14 @@ namespace NomapPrinter
             pinScale = config("Map style extended", "Pin scale", 1.0f, "Pin scale");
             preserveSharedMapFog = config("Map style extended", "Preserve shared map fog tint for vanilla map", true, "Generate Vanilla map with shared map fog tint");
 
-            mapMaker             = configLocal("Map",              "Mapmaker",          Mapmaker.shudnal, "Scale of rendered map.");
+            _mapMaker             = configLocal("Map",              "Mapmaker",          Mapmaker.shudnal, "Scale of rendered map.");
 
-            mapScale             = configLocal("Mapmaker.zwiebaq", "Scale",             MapScale.Double,  "Scale of rendered map.");
-            mapStyle             = configLocal("Mapmaker.zwiebaq", "Style",             MapStyle.Topo,    "Map rendering style.");
-            mapHeightDivider     = configLocal("Mapmaker.zwiebaq", "HeightDivider",     256,              "Original height value divider.");
-            mapDepthDivider      = configLocal("Mapmaker.zwiebaq", "DepthDivider",      256,              "Original depth value divider.");
-            mapContourInterval   = configLocal("Mapmaker.zwiebaq", "ContourInterval",   8,                "Contour interval.");
-            mapFetchOnlyExplored = configLocal("Mapmaker.zwiebaq", "FetchOnlyExplored", true,             "Fetch map data only for explored area.");
+            _mapScale             = configLocal("Mapmaker.zwiebaq", "Scale",             MapScale.Double,  "Scale of rendered map.");
+            _mapStyle             = configLocal("Mapmaker.zwiebaq", "Style",             MapStyle.Topo,    "Map rendering style.");
+            _mapHeightDivider     = configLocal("Mapmaker.zwiebaq", "HeightDivider",     256,              "Original height value divider.");
+            _mapDepthDivider      = configLocal("Mapmaker.zwiebaq", "DepthDivider",      256,              "Original depth value divider.");
+            _mapContourInterval   = configLocal("Mapmaker.zwiebaq", "ContourInterval",   8,                "Contour interval.");
+            _mapFetchOnlyExplored = configLocal("Mapmaker.zwiebaq", "FetchOnlyExplored", true,             "Fetch map data only for explored area.");
 
             messageStart = config("Messages", "Drawing begin", "Remembering travels...", "Center message when drawing is started. [Not Synced with Server]", false);
             messageSaving = config("Messages", "Drawing end", "Drawing map...", "Center message when saving file is started. [Not Synced with Server]", false);
@@ -817,13 +817,13 @@ namespace NomapPrinter
 
         private static string GetMapFileName(string tag = "")
         {
-            int    scaleFactor = (int)mapScale.Value;
+            int    scaleFactor = (int)_mapScale.Value;
             int    textureSize = scaleFactor * Minimap.instance.m_textureSize;
             string worldName   = game_world != null ? game_world.m_name : "w";
-            string mapStyleStr = mapStyle.Value.ToString().ToLower();
+            string mapStyleStr = _mapStyle.Value.ToString().ToLower();
             return tag.Length > 0
-                ? $"valheim-map-{worldName}-{mapStyleStr}-{textureSize}-{tag}.png"
-                : $"valheim-map-{worldName}-{mapStyleStr}-{textureSize}.png";
+                ? $"valheim-map-{worldName}-{mapStyleStr}-{_mapHeightDivider.Value}-{_mapContourInterval.Value}-{textureSize}-{tag}.png"
+                : $"valheim-map-{worldName}-{mapStyleStr}-{_mapHeightDivider.Value}-{_mapContourInterval.Value}-{textureSize}.png";
         }
 
         private static string GetPlayerName()
@@ -1084,7 +1084,7 @@ namespace NomapPrinter
 
             if (!instance.maker.working)
             {
-                if (mapMaker.Value == Mapmaker.shudnal)
+                if (_mapMaker.Value == Mapmaker.shudnal)
                     instance.StartCoroutine(instance.maker.Go());
                 else
                     instance.StartCoroutine(instance.maker.Go2());
@@ -1343,19 +1343,19 @@ namespace NomapPrinter
                     AbyssColor = m_abyssColor
                 };
 
-                switch (mapStyle.Value)
+                switch (_mapStyle.Value)
                 {
-                    case MapStyle.Paint:
+                    case MapStyle.Aerial:
                         yield return imageGen.GenerateSatelliteImage();
                         break;
                     case MapStyle.Topo:
-                        yield return imageGen.GenerateTopographicalMap(mapContourInterval.Value);
+                        yield return imageGen.GenerateTopographicalMap(_mapContourInterval.Value);
                         break;
                     case MapStyle.Chart:
-                        yield return imageGen.GenerateChartMap(mapContourInterval.Value);
+                        yield return imageGen.GenerateChartMap(_mapContourInterval.Value);
                         break;
                     case MapStyle.Ink:
-                        yield return imageGen.GenerateOldMap(mapContourInterval.Value);
+                        yield return imageGen.GenerateOldMap(_mapContourInterval.Value);
                         break;
                     default:
                         goto case MapStyle.Topo;
@@ -1399,7 +1399,7 @@ namespace NomapPrinter
 
                             Directory.CreateDirectory(fileDir);
 
-                            if (!_worldIsSaved && !mapFetchOnlyExplored.Value)
+                            if (!_worldIsSaved && !_mapFetchOnlyExplored.Value)
                             {
                                 fileName = Path.Combine(fileDir, GetMapFileName());
                                 Log($"[i] saving clear map to file \"{fileName}\"");
@@ -1542,32 +1542,35 @@ namespace NomapPrinter
 
             private IEnumerator GetMapData()
             {
-                int scaleFactor = (int)mapScale.Value;
+                int scaleFactor = (int)_mapScale.Value;
 
                 textureSize = scaleFactor * Minimap.instance.m_textureSize;
 
                 //Texture2D fogTexture      = (Texture2D)Minimap.instance.m_mapImageLarge.material.GetTexture("_FogTex");
-                float     pixelSize       = (float)Minimap.instance.m_pixelSize / scaleFactor;
-                int       waterLevel      = (int)ZoneSystem.instance.m_waterLevel;
+                float     pixelSize       = Minimap.instance.m_pixelSize / scaleFactor;
+                float     waterLevel      = ZoneSystem.instance.m_waterLevel;
                 int       halfTextureSize = textureSize / 2;
-                float     halfPixelSize   = pixelSize / 2f;
+                float     halfPixelSize   = pixelSize / 2;
                 int       arraySize       = textureSize * textureSize;
 
                 Color32[] array  = new Color32[arraySize];  // texture {color}
                 Color[]   array2 = new Color[arraySize];    // forest  {bool}
-                Color32[] array3 = new Color32[arraySize];  // height  {float}  TODO: switch to float[] or Color[] as byte range is not enough
+                // ! array3 -> Minimap.instance.m_heightTexture.GetPixel(x, y).r (with the precision of Minimap.instance.m_textureSize)
+                Color32[] array3 = new Color32[arraySize];  // height  {float}
                 //Color32[] array4 = new Color32[arraySize];  // fog     {bool}
                 Color32[] worldMask = _worldMaskIsReady ? null : new Color32[arraySize];  // world mask {color or bool}
+                float[]   altitudes = new float[arraySize];
 
+                // ! exploration -> bool[] Minimap.instance.m_explored / bool[] Minimap.instance.m_exploredOthers (with the precision of Minimap.instance.m_textureSize)
                 bool[]    exploration = new bool[arraySize];
-                bool[]    mapData     = new bool[arraySize];
+                bool[]    mapData     = _mapFetchOnlyExplored.Value ? new bool[arraySize] : null;
 
                 var internalThread = new Thread(() =>
                 {
-                    if (!mapFetchOnlyExplored.Value)
+                    if (!_mapFetchOnlyExplored.Value)
                     {
-                        for (int i = 0; i < arraySize; ++i)
-                            mapData[i] = true;
+                        //for (int i = 0; i < arraySize; ++i)
+                        //    mapData[i] = true;
 
                         if (saveMapToFile.Value)
                         {
@@ -1640,7 +1643,7 @@ namespace NomapPrinter
 
                             for (int j = 0, n = ti; j < textureSize; ++j, ++n)
                             {
-                                if (!mapData[n])  // ? what about abyss? check
+                                if (mapData != null && !mapData[n])  // ? what about abyss? check
                                     continue;
 
                                 float wx = (float)(j - halfTextureSize) * pixelSize + halfPixelSize;
@@ -1648,6 +1651,8 @@ namespace NomapPrinter
                                 Heightmap.Biome biome       = WorldGenerator.instance.GetBiome(wx, wy);
                                 float           biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color mask);
                                 float           altitude    = biomeHeight - waterLevel;
+
+                                altitudes[n] = altitude;
 
                                 array2[n] = GetMaskColor(wx, wy, altitude, biome);  // -> forest
 
@@ -1662,32 +1667,32 @@ namespace NomapPrinter
                                     // Biome color
                                     array[n] = GetPixelColor(biome, biomeHeight);
 
+                                    // ! Minimap logic shows that biome height < waterLevel is considered as water area
+                                    //   => altitude >= 0 should be a land
+
                                     // Downscaled biome height as color
                                     if (altitude > 0)
-                                        array3[n] = new Color(altitude / mapHeightDivider.Value, 0f, 0f);
+                                        array3[n] = new Color(altitude / _mapHeightDivider.Value, 0f, 0f);
                                     else
-                                        array3[n] = new Color(0f, 0f, altitude / -mapDepthDivider.Value);
+                                        array3[n] = new Color(0f, 0f, altitude / -_mapDepthDivider.Value);
 
                                     // Fog map and exploration data
-                                    if (!mapFetchOnlyExplored.Value)
+                                    if (!_mapFetchOnlyExplored.Value)
                                     {
                                         //Color pixel = fogTexture.GetPixel(j / scaleFactor, i / scaleFactor);
                                         //bool isFog = pixel.r != 0f && (!showSharedMap.Value || pixel.g != 0f);
-                                        //exploration[n] = !isFog;
-
-                                        //array4[n] = isFog ? Color.gray : Color.clear;
+                                        //exploration[n] = !isFog;  // array4[n] = isFog ? Color.gray : Color.clear;
 
                                         exploration[n] = IsExplored(j / scaleFactor, i / scaleFactor);
                                     }
                                 }
-
-                            }
-                        }
+                            }  // for (int j = 0, n = ti; j < textureSize; ++j, ++n)
+                        }  // for (int i = 0, ti = 0; i < textureSize; ++i, ti += textureSize)
                     }
                 });
 
                 internalThread.Start();
-                while (internalThread.IsAlive == true)
+                while (internalThread.IsAlive)
                 {
                     yield return null;
                 }
