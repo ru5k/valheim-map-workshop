@@ -875,7 +875,7 @@ public class MapImageGeneration
                 {
                     float factor = 1f - (1f - forestColorFactor) * forestMask[i].r;
 
-                    // ?? we rewrite output[i].g later with (byte)(array[i].g * factor) 5 lines later => next two lines are useless
+                    // ?? we rewrite output[i].g with (byte)(array[i].g * factor) 5 lines later => next two lines are useless
                     //if (forestMask[i].g > 0f)
                     //    output[i].g = (byte)(array[i].g + (byte)(forestMask[i].g * forestMask[i].b * 255f));
 

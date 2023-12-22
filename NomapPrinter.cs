@@ -140,14 +140,18 @@ namespace NomapPrinter
 
         private static Color32[] _worldMapColors;
         private static Color32[] _worldMaskColors;
+        private static Color32[] _heightMapColors;
 
         private static Texture2D _worldMap         = new Texture2D(4096, 4096, TextureFormat.RGBA32, false);
         private static bool      _worldMapIsReady  = false;
         private static Texture2D _worldMask        = new Texture2D(4096, 4096, TextureFormat.RGBA32, false);
         private static bool      _worldMaskIsReady = false;
+        private static Texture2D _heightMap        = new Texture2D(4096, 4096, TextureFormat.RGBA32, false);
+        private static bool      _heightMapIsReady = false;
         private static bool      _worldIsSaved     = false;
 
         private const string     WorldMaskTag = "world-mask";
+        private const string     HeightMapTag = "heights";
 
         //
         // -- custom in game map view/show/display
@@ -212,7 +216,7 @@ namespace NomapPrinter
         {
             Character,
             LocalFolder,
-            // ? like local folder, but readonly
+            // ? like local folder, but readonly with runtime image reload on file change
             LoadFromSharedFile
         }
 
@@ -867,7 +871,18 @@ namespace NomapPrinter
                     }
                 }
 
-                if (_worldMapIsReady && _worldMaskIsReady)
+                if (!_heightMapIsReady)
+                {
+                    Log($"[d] world mask is null - trying to load it from file");
+                    _heightMapIsReady = ReadMapTexture(ref _heightMap, HeightMapTag);
+                    if (_heightMapIsReady)
+                    {
+                        Log($"[i] loaded world mask data from file");
+                        _heightMapColors = _heightMap.GetPixels32();
+                    }
+                }
+
+                if (_worldMapIsReady && _worldMaskIsReady && _heightMapIsReady)
                 {
                     Log($"[i] map and world mask are ready");
                     _worldIsSaved = true;
@@ -1384,6 +1399,15 @@ namespace NomapPrinter
                         _worldMask.Apply();
                         _worldMaskIsReady = true;
                     }
+
+                    if (!_heightMapIsReady)
+                    {
+                        if (_heightMap.width != textureSize || _heightMap.height != textureSize)
+                            _heightMap.Reinitialize(textureSize, textureSize, TextureFormat.RGBA32, false);
+                        _heightMap.SetPixels32(_heightMapColors);
+                        _heightMap.Apply();
+                        _heightMapIsReady = true;
+                    }
                 }
 
                 ApplyMapTexture2(imageGen.output);  // also decorates map with pins
@@ -1408,6 +1432,10 @@ namespace NomapPrinter
                                 fileName = Path.Combine(fileDir, GetMapFileName(WorldMaskTag));
                                 Log($"[i] saving world mask to file \"{fileName}\"");
                                 File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(_worldMask));
+
+                                fileName = Path.Combine(fileDir, GetMapFileName(HeightMapTag));
+                                Log($"[i] saving height map to file \"{fileName}\"");
+                                File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(_heightMap));
 
                                 _worldIsSaved = true;
                             }
@@ -1548,18 +1576,20 @@ namespace NomapPrinter
 
                 //Texture2D fogTexture      = (Texture2D)Minimap.instance.m_mapImageLarge.material.GetTexture("_FogTex");
                 float     pixelSize       = Minimap.instance.m_pixelSize / scaleFactor;
-                float     waterLevel      = ZoneSystem.instance.m_waterLevel;
+                float     waterLevel      = ZoneSystem.instance.m_waterLevel;  // = 30f by default
                 int       halfTextureSize = textureSize / 2;
                 float     halfPixelSize   = pixelSize / 2;
                 int       arraySize       = textureSize * textureSize;
 
                 Color32[] array  = new Color32[arraySize];  // texture {color}
                 Color[]   array2 = new Color[arraySize];    // forest  {bool}
-                // ! array3 -> Minimap.instance.m_heightTexture.GetPixel(x, y).r (with the precision of Minimap.instance.m_textureSize)
+                // ! array3 / heightmap -> Minimap.instance.m_heightTexture.GetPixel(x, y).r (with the precision of Minimap.instance.m_textureSize)
                 Color32[] array3 = new Color32[arraySize];  // height  {float}
                 //Color32[] array4 = new Color32[arraySize];  // fog     {bool}
-                Color32[] worldMask = _worldMaskIsReady ? null : new Color32[arraySize];  // world mask {color or bool}
-                float[]   altitudes = new float[arraySize];
+
+                Color32[] worldMask      = _worldMaskIsReady ? null : new Color32[arraySize];  // world mask {color or bool}
+                float[]   altitudes      = _heightMapIsReady ? null : new float[arraySize];
+                Color32[] altitudeColors = _heightMapIsReady ? null : new Color32[arraySize];
 
                 // ! exploration -> bool[] Minimap.instance.m_explored / bool[] Minimap.instance.m_exploredOthers (with the precision of Minimap.instance.m_textureSize)
                 bool[]    exploration = new bool[arraySize];
@@ -1627,7 +1657,7 @@ namespace NomapPrinter
                         }
                     }
 
-                    if (_worldMapIsReady && _worldMaskIsReady)
+                    if (_worldMapIsReady && _worldMaskIsReady && _heightMapIsReady)
                     {
                         for (int i = 0, d = 0; i < textureSize; ++i, d += textureSize)
                         {
@@ -1653,6 +1683,16 @@ namespace NomapPrinter
                                 float           altitude    = biomeHeight - waterLevel;
 
                                 altitudes[n] = altitude;
+
+                                byte[] bytes = altitude >= 0 ? BitConverter.GetBytes((int)altitude) : BitConverter.GetBytes((int)(-altitude));
+                                if (!BitConverter.IsLittleEndian)
+                                    Array.Reverse(bytes);
+                                //Color32 color = new Color32(bytes[0],bytes[1],bytes[2],altitude > 0 ? (byte)255 : (byte)50);
+                                ref Color32 color = ref altitudeColors[n];
+                                color.r = bytes[0];
+                                color.g = bytes[1];
+                                color.b = bytes[2];
+                                color.a = altitude > 0 ? (byte)255 : (byte)55;
 
                                 array2[n] = GetMaskColor(wx, wy, altitude, biome);  // -> forest
 
@@ -1712,6 +1752,9 @@ namespace NomapPrinter
 
                     //_worldMaskIsReady = true;
                 }
+
+                if (!_heightMapIsReady)
+                    _heightMapColors = altitudeColors;
 
                 m_exploration   = exploration;
                 m_mapData       = mapData;
