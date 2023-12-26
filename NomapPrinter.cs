@@ -142,6 +142,7 @@ namespace NomapPrinter
         private static Color32[] _worldMapColors;
         private static Color32[] _worldMaskColors;
         private static Color32[] _heightMapColors;
+        private static float[]   _altitudes;
 
         private static Texture2D _worldMap         = new Texture2D(4096, 4096, TextureFormat.RGBA32, false);
         private static bool      _worldMapIsReady  = false;
@@ -772,11 +773,11 @@ namespace NomapPrinter
             return false;
         }
 
-        private static bool ReadMapTexture(ref Texture2D texture, string tag = "")
+        private static bool ReadMapTexture(ref Texture2D texture, IEnumerable<string> tags = null)
         {
             //Texture2D texture = null;
 
-            string filename = Path.Combine(GetMapFileDir(), GetMapFileName(tag));
+            string filename = Path.Combine(GetMapFileDir(), GetMapFileName(tags));
 
             if (!File.Exists(filename))
             {
@@ -814,20 +815,36 @@ namespace NomapPrinter
             return filePath.Value.IsNullOrWhiteSpace() ? Path.Combine(localPath, "map") : filePath.Value;
         }
 
-        private static string GetMapFileName(string tag = "")
+        private static string GetMapStyleName()
         {
-            int    scaleFactor = (int)_mapScale.Value;
-            int    textureSize = scaleFactor * Minimap.instance.m_textureSize;
-            string worldName   = game_world != null ? game_world.m_name : "w";
             string mapStyleStr = _mapStyle.Value.ToString().ToLower();
-            return tag.Length > 0
-                ? $"valheim-map-{worldName}-{mapStyleStr}-{_mapHeightDivider.Value}-{_mapContourInterval.Value}-{textureSize}-{tag}.png"
-                : $"valheim-map-{worldName}-{mapStyleStr}-{_mapHeightDivider.Value}-{_mapContourInterval.Value}-{textureSize}.png";
+            return $"{mapStyleStr}-{_mapHeightDivider.Value}-{_mapContourInterval.Value}";
         }
 
         private static string GetPlayerName()
         {
+            string s = string.Join("-", new string[] { "1", "2" });
             return Player.m_localPlayer ? Player.m_localPlayer.GetPlayerName() : "x";
+        }
+
+        private static int GetMapResolution()
+        {
+            return (int)_mapScale.Value * Minimap.instance.m_textureSize;
+        }
+
+        private static string GetMapFileName(IEnumerable<string> tags = null)
+        {
+            string worldName   = game_world != null ? game_world.m_name : "w";
+            int    textureSize = GetMapResolution();
+
+            // !? altitudes:
+            //     world: $"valheim-map-{worldName}-{textureSize}"
+            //     style:      "-{mapStyleStr}-"
+            //     isohypses:  "-{_mapHeightDivider.Value}-{_mapContourInterval.Value}-"
+            //     player fog: "-{_playerName}-"
+            return tags != null
+                ? $"valheim-map-{worldName}-{textureSize}-{string.Join("-", tags)}.png"
+                : $"valheim-map-{worldName}-{textureSize}.png";
         }
 
         private static bool LoadMapFromPlayer(Player player)
@@ -846,7 +863,7 @@ namespace NomapPrinter
                 if (!_worldMapIsReady)
                 {
                     Log($"[d] map is null - trying to load it from file");
-                    _worldMapIsReady = ReadMapTexture(ref _worldMap);
+                    _worldMapIsReady = ReadMapTexture(ref _worldMap, new[] {GetMapStyleName()});
                     if (_worldMapIsReady)
                     {
                         Log($"[i] loaded map data from file");
@@ -858,7 +875,7 @@ namespace NomapPrinter
                 if (!_worldMaskIsReady)
                 {
                     Log($"[d] world mask is null - trying to load it from file");
-                    _worldMaskIsReady = ReadMapTexture(ref _worldMask, WorldMaskTag);
+                    _worldMaskIsReady = ReadMapTexture(ref _worldMask, new[] {WorldMaskTag});
                     if (_worldMaskIsReady)
                     {
                         Log($"[i] loaded world mask data from file");
@@ -868,18 +885,44 @@ namespace NomapPrinter
 
                 if (!_heightMapIsReady)
                 {
-                    Log($"[d] world mask is null - trying to load it from file");
-                    _heightMapIsReady = ReadMapTexture(ref _heightMap, HeightMapTag);
+                    Log($"[d] height map is null - trying to load it from file");
+                    _heightMapIsReady = ReadMapTexture(ref _heightMap, new[] {HeightMapTag});
                     if (_heightMapIsReady)
                     {
-                        Log($"[i] loaded world mask data from file");
+                        Log($"[i] loaded height map data from file");
                         _heightMapColors = _heightMap.GetPixels32();
+
+                        //int mapResolution = _heightMap.width; // GetMapResolution();
+                        //int arraySize = _heightMapColors.Length; // mapResolution * mapResolution;
+                        _altitudes = new float[_heightMapColors.Length];
+
+                        byte[] b = new byte[4];
+                        for (int i = 0; i < _altitudes.Length; ++i)
+                        {
+                            b[0] = _heightMapColors[i].r;
+                            b[1] = _heightMapColors[i].g;
+                            b[2] = _heightMapColors[i].b;
+                            b[4] = 0;
+
+                            if (!BitConverter.IsLittleEndian)
+                                Array.Reverse(b);
+
+                            int h = BitConverter.ToInt32(b, 0);
+
+                            if (_heightMapColors[i].a < 200)
+                            {
+                                h = -h;
+                            }
+
+                            _altitudes[i] = h;
+                        }
+
                     }
                 }
 
                 if (_worldMapIsReady && _worldMaskIsReady && _heightMapIsReady)
                 {
-                    Log($"[i] map and world mask are ready");
+                    Log($"[i] map, world mask and height map are ready");
                     _worldIsSaved = true;
                     //worldMask = s_worldMask.GetPixels32();
                 }
@@ -1387,28 +1430,28 @@ namespace NomapPrinter
 
                             if (!_worldIsSaved && !_mapFetchOnlyExplored.Value)
                             {
-                                fileName = Path.Combine(fileDir, GetMapFileName());
+                                fileName = Path.Combine(fileDir, GetMapFileName(new[] {GetMapStyleName()}));
                                 Log($"[i] saving clear map to file \"{fileName}\"");
                                 File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(_worldMap));
 
-                                fileName = Path.Combine(fileDir, GetMapFileName(WorldMaskTag));
+                                fileName = Path.Combine(fileDir, GetMapFileName(new[] {WorldMaskTag}));
                                 Log($"[i] saving world mask to file \"{fileName}\"");
                                 File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(_worldMask));
 
-                                fileName = Path.Combine(fileDir, GetMapFileName(HeightMapTag));
+                                fileName = Path.Combine(fileDir, GetMapFileName(new[] {HeightMapTag}));
                                 Log($"[i] saving height map to file \"{fileName}\"");
                                 File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(_heightMap));
 
                                 _worldIsSaved = true;
                             }
 
-                            fileName = Path.Combine(fileDir, GetMapFileName(GetPlayerName()));
+                            fileName = Path.Combine(fileDir, GetMapFileName(new[] {GetMapStyleName(), GetPlayerName()}));
                             Log($"[i] saving player map to file \"{fileName}\"");
                             File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(mapTexture));
 
                             // ! debug +4
                             Texture2D fogTexture = (Texture2D)Minimap.instance.m_mapImageLarge.material.GetTexture("_FogTex");
-                            fileName = Path.Combine(fileDir, GetMapFileName($"{GetPlayerName()}-fog"));
+                            fileName = Path.Combine(fileDir, GetMapFileName(new[] {GetMapStyleName(), GetPlayerName(), "fog"}));
                             Log($"[i] saving player fog map to file \"{fileName}\"");
                             File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(fogTexture));
                         }
@@ -1716,7 +1759,10 @@ namespace NomapPrinter
                 }
 
                 if (!_heightMapIsReady)
+                {
                     _heightMapColors = altitudeColors;
+                    _altitudes       = altitudes;
+                }
 
                 m_exploration   = exploration;
                 m_mapData       = mapData;
