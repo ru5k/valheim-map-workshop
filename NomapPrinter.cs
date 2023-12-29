@@ -11,6 +11,7 @@ using System.Threading;
 using UnityEngine;
 using UnityEngine.UI;
 using ServerSync;
+using UnityEngine.Experimental.Rendering;
 
 namespace NomapPrinter
 {
@@ -149,6 +150,9 @@ namespace NomapPrinter
         private static bool      _worldMaskIsReady = false;
         private static Texture2D _heightMap        = new Texture2D(4096, 4096, TextureFormat.RGBA32, false);
         private static bool      _heightMapIsReady = false;
+
+        private static SquareImage _biomes = new SquareImage();
+
         private static bool      _worldIsSaved     = false;
 
         private const string     WorldMaskTag = "world-mask";
@@ -1267,6 +1271,94 @@ namespace NomapPrinter
             }
         }
 
+
+        private class SquareImage
+        {
+            private Texture2D _texture;
+            private Color32[] _colors;
+            //private int       _pixelCount;
+
+            public SquareImage() : this(1) {}
+
+            public SquareImage(int size)
+            {
+                if (size < 1)
+                    size = 1;
+                _colors  = new Color32[size*size];
+                _texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            }
+
+            public void Clear()
+            {
+                if (IsEmpty())
+                    return;
+
+                _colors = new Color32[1];
+                _texture.Reinitialize(1, 1, TextureFormat.RGBA32, false);
+            }
+
+            public bool IsEmpty()
+            {
+                return !_texture || _texture.width <= 1;
+            }
+
+            public int Size => _texture ? _texture.width : 0;
+
+            public int PixelCount => _colors?.Length ?? 0;
+
+            public Color32[] Colors
+            {
+                get => _colors;
+                set
+                {
+                    if (value == null)
+                        return;
+
+                    int size = (int)Math.Sqrt(value.Length);
+                    if (size*size != value.Length)
+                        return;
+
+                    //_colors = value;
+                    if (_colors == null || _colors.Length != value.Length)
+                        _colors = new Color32[value.Length];
+                    Array.Copy(value, _colors, value.Length);
+
+                    //_pixelCount = value.Length;
+
+                    if (!_texture)
+                        _texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+                    else
+                        _texture.Reinitialize(size, size, TextureFormat.RGBA32, false);
+
+                    _texture.SetPixels32(value);
+                    _texture.Apply();
+                }
+            }
+
+            //public Texture2D Texture => _texture;
+
+            public byte[] EncodeToPNG()
+            {
+                return _texture.EncodeToPNG();
+            }
+
+            public void WriteAsPNG(string path)
+            {
+                File.WriteAllBytes(path, _texture.EncodeToPNG());
+            }
+
+            public static explicit operator Texture2D(SquareImage instance)
+            {
+                return instance._texture;
+            }
+
+            public static explicit operator Color32[](SquareImage instance)
+            {
+                return instance._colors;
+            }
+        }
+
+
         private class MapGeneration : MonoBehaviour
         {
             public bool working = false;
@@ -1349,7 +1441,7 @@ namespace NomapPrinter
                         {
                             Directory.CreateDirectory(filepath);
                             Log($"Writing {filename}");
-                            File.WriteAllBytes(filename, ImageConversion.EncodeToPNG(mapTexture));
+                            File.WriteAllBytes(filename, mapTexture.EncodeToPNG());
                         }
                         catch (Exception ex)
                         {
@@ -1391,6 +1483,9 @@ namespace NomapPrinter
 
                 ShowMessage(messageSaving.Value);
 
+                if (_biomes.IsEmpty())
+                    _biomes.Colors = m_mapTexture;
+
                 MapImageGeneration.Initialize(m_mapTexture, m_forestTexture, m_heightmap, m_exploration, textureSize, m_mapData);
 
                 MapImageGeneration imageGen = new MapImageGeneration
@@ -1399,6 +1494,8 @@ namespace NomapPrinter
                     WorldMask  = _worldMaskColors,
                     AbyssColor = m_abyssColor
                 };
+
+                // Mapmaker mapmaker = new Mapmaker();
 
                 switch (_mapStyle.Value)
                 {
@@ -1452,8 +1549,6 @@ namespace NomapPrinter
                     }
                 }
 
-                ApplyMapTexture2(imageGen.output);  // also decorates map with pins
-
                 if (saveMapToFile.Value)
                 {
                     var internalThread = new Thread(() =>
@@ -1482,15 +1577,49 @@ namespace NomapPrinter
                                 _worldIsSaved = true;
                             }
 
-                            fileName = Path.Combine(fileDir, GetMapFileName(new[] {GetMapStyleName(), GetPlayerName()}));
-                            Log($"[i] saving player map to file \"{fileName}\"");
-                            File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(mapTexture));
+                            // yet untouched biomes in mapTexture if was not loaded
+                            fileName = Path.Combine(fileDir, GetMapFileName(new[] {"biomes"}));
+                            Log($"[i] saving biomes map to file \"{fileName}\"");
+                            //File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(mapTexture));
+                            _biomes.WriteAsPNG(fileName);
 
                             // ! debug +4
                             Texture2D fogTexture = (Texture2D)Minimap.instance.m_mapImageLarge.material.GetTexture("_FogTex");
-                            fileName = Path.Combine(fileDir, GetMapFileName(new[] {GetMapStyleName(), GetPlayerName(), "fog"}));
+                            fileName = Path.Combine(fileDir, GetMapFileName(new[] {GetPlayerName(), "fog"}));
                             Log($"[i] saving player fog map to file \"{fileName}\"");
                             File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(fogTexture));
+                        }
+                        catch (Exception e)
+                        {
+                            Log(e);
+                        }
+                    });
+
+                    internalThread.Start();
+                    while (internalThread.IsAlive == true)
+                    {
+                        yield return null;
+                    }
+
+                    ShowMessage($"{messageSavedTo.Value} {GetMapFileDir()}", MessageHud.MessageType.TopLeft);
+                }
+
+                ApplyMapTexture2(imageGen.output);  // also decorates map with pins
+
+                if (saveMapToFile.Value)
+                {
+                    var internalThread = new Thread(() =>
+                    {
+                        try
+                        {
+                            string fileDir = GetMapFileDir();
+                            string fileName;
+
+                            Directory.CreateDirectory(fileDir);
+
+                            fileName = Path.Combine(fileDir, GetMapFileName(new[] {GetMapStyleName(), GetPlayerName()}));
+                            Log($"[i] saving player map to file \"{fileName}\"");
+                            File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(mapTexture));
                         }
                         catch (Exception e)
                         {
@@ -1726,7 +1855,7 @@ namespace NomapPrinter
 
                                 altitudes[n] = altitude;
 
-                                byte[] bytes = altitude >= 0 ? BitConverter.GetBytes((int)altitude) : BitConverter.GetBytes((int)(-altitude));
+                                byte[] bytes = altitude > 0 ? BitConverter.GetBytes((int)(altitude + 1)) : BitConverter.GetBytes((int)(-altitude));
                                 if (!BitConverter.IsLittleEndian)
                                     Array.Reverse(bytes);
                                 //Color32 color = new Color32(bytes[0],bytes[1],bytes[2],altitude > 0 ? (byte)255 : (byte)50);
@@ -2057,30 +2186,39 @@ namespace NomapPrinter
             private static Color GetPixelColor(Heightmap.Biome biome, float height)
             {
                 if (height < abyssBiomeHeight)
-                    return m_abyssColor;
+                {
+                    if (biome != Heightmap.Biome.None)
+                        return Color.clear;
+                }
+
+                //public enum Biome
+                //{
+                //    None        =   0,
+                //    Meadows     =   1,
+                //    Swamp       =   2,
+                //    Mountain    =   4,
+                //    BlackForest =   8,
+                //    Plains      =  16,  // 0x00000010
+                //    AshLands    =  32,  // 0x00000020
+                //    DeepNorth   =  64,  // 0x00000040
+                //    Ocean       = 256,  // 0x00000100
+                //    Mistlands   = 512   // 0x00000200
+                //}
 
                 switch (biome)
                 {
-                    case Heightmap.Biome.Meadows:
-                        return Minimap.instance.m_meadowsColor;
-                    case Heightmap.Biome.AshLands:
-                        return Minimap.instance.m_ashlandsColor;
-                    case Heightmap.Biome.BlackForest:
-                        return Minimap.instance.m_blackforestColor;
-                    case Heightmap.Biome.DeepNorth:
-                        return m_deepNorthColor;
-                    case Heightmap.Biome.Plains:
-                        return Minimap.instance.m_heathColor;
-                    case Heightmap.Biome.Swamp:
-                        return Minimap.instance.m_swampColor;
-                    case Heightmap.Biome.Mountain:
-                        return Minimap.instance.m_mountainColor;
-                    case Heightmap.Biome.Mistlands:
-                        return m_mistlandsColor;
-                    case Heightmap.Biome.Ocean:
-                        return Color.blue;
+                    case Heightmap.Biome.None:        return m_abyssColor;
+                    case Heightmap.Biome.Meadows:     return Minimap.instance.m_meadowsColor;
+                    case Heightmap.Biome.Swamp:       return Minimap.instance.m_swampColor;
+                    case Heightmap.Biome.Mountain:    return Minimap.instance.m_mountainColor;
+                    case Heightmap.Biome.BlackForest: return Minimap.instance.m_blackforestColor;
+                    case Heightmap.Biome.Plains:      return Minimap.instance.m_heathColor;
+                    case Heightmap.Biome.AshLands:    return Minimap.instance.m_ashlandsColor;
+                    case Heightmap.Biome.DeepNorth:   return m_deepNorthColor;
+                    case Heightmap.Biome.Ocean:       return Color.blue;  // -> const
+                    case Heightmap.Biome.Mistlands:   return m_mistlandsColor;
                     default:
-                        return Color.black;
+                        return Color.clear;
                 }
             }
 
