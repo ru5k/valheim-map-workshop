@@ -17,8 +17,10 @@
 				DestinationFile="$(ProjectDir)package\thunderstore\$(SolutionName).zip"
 				Overwrite="true"/>
 	</Target>
+	<!--
 	<Target Name="CopyDLLPlugins" AfterTargets="ILRepacker">
 		<Copy SourceFiles="$(TargetPath)" DestinationFolder="F:\Steam\steamapps\common\Valheim\BepInEx\plugins\" />
 		<Message Text="Copied to plugins folder." Importance="High" />
 	</Target>
+	-->
 </Project>
