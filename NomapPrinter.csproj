@@ -96,6 +96,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="MapImageGeneration.cs" />
+    <Compile Include="Mapmaker.cs" />
     <Compile Include="NomapPrinter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

@@ -20,9 +20,8 @@ public class MapImageGeneration
     public Color32[] output;
 
     public Color32[] WorldMap;
-    public Color32[] WorldMask;
 
-    public static readonly Color32 yellowMap = new Color32(203, 155, 87, byte.MaxValue);
+    public static readonly Color32 yellowMap  = new Color32(203, 155, 87, byte.MaxValue);
     private static readonly Color32 OceanColor = new Color32(20, 100, 255, byte.MaxValue);
 
     public Color32 AbyssColor = new Color32(0, 0, 0, byte.MaxValue);
@@ -637,26 +636,12 @@ public class MapImageGeneration
 
         var internalThread = new Thread(() =>
         {
-            if (WorldMask == null)
+            for (int i = 0; i < m_textureSize * m_textureSize; i++)
             {
-                for (int i = 0; i < m_textureSize * m_textureSize; i++)
+                ref Color32 np = ref noise[i];
+                if (!exploration[i] && m_mapTexture[i].rgba != AbyssColor.rgba)
                 {
-                    ref Color32 np = ref noise[i];
-                    if (!exploration[i])
-                    {
-                        fog[i] = new Color32((byte)(203 + (np.r - 128)), (byte)(155 + (np.g - 128)), (byte)(87 + (np.b - 128)), 255);
-                    }
-                }
-            }
-            else
-            {
-                for (int i = 0; i < m_textureSize * m_textureSize; i++)
-                {
-                    ref Color32 np = ref noise[i];
-                    if (!exploration[i] && WorldMask[i].a > 0)
-                    {
-                        fog[i] = new Color32((byte)(203 + (np.r - 128)), (byte)(155 + (np.g - 128)), (byte)(87 + (np.b - 128)), 255);
-                    }
+                    fog[i] = new Color32((byte)(203 + (np.r - 128)), (byte)(155 + (np.g - 128)), (byte)(87 + (np.b - 128)), 255);
                 }
             }
         });
