@@ -1,7 +1,7 @@
 ﻿using System.Collections;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System;
-using System.Runtime.CompilerServices;
 using UnityEngine;
 
 
@@ -13,6 +13,8 @@ public class Mapmaker
 
     //private int                _mapPixelCount;
     private readonly int       _mapSize;
+
+    private Color32   _abyssColor = new Color32(0, 0, 0, byte.MaxValue);
 
     //private Color32[] _scenery;       // -> World
     //private Color32[] _contours;
@@ -33,7 +35,7 @@ public class Mapmaker
     public Color32[] ExploredMap;  // explored map with contours
     //public Color32[] WorldMask;
 
-    public Color32   AbyssColor { get; set; } = new Color32(0, 0, 0, byte.MaxValue);
+    private static string _trace;
 
 
     public Mapmaker(int mapSize, Color32[] biomes, Color32[] heights, Color32[] forest, Color32[] explored, int contourInterval)
@@ -46,53 +48,82 @@ public class Mapmaker
         _contourInterval = contourInterval;
 
         //_mapPixelCount   = _mapSize * _mapSize;
+
+        _trace = $"Mapmaker(): _mapSize = {_mapSize}, _contourInterval = {_contourInterval}, _biomes.Length = {_biomes.Length}\n";
     }
 
 
-    ~Mapmaker()
+    //~Mapmaker()
+    //{
+    //    _biomes   = null;
+    //    _heights  = null;
+    //    _forest   = null;
+    //    _explored = null;
+    //}
+
+    public Color32   AbyssColor
     {
-        _biomes   = null;
-        _heights  = null;
-        _forest   = null;
-        _explored = null;
+        get => _abyssColor;
+        set
+        {
+            if (_abyssColor.rgba != value.rgba)
+            {
+                _abyssColor = value;
+                // TODO: invalidate
+            }
+        }
     }
 
 
-    public Color32[] RenderTopographicalMap()
+    public static string Trace()
+    {
+        return _trace;
+    }
+
+    public void RenderTopographicalMap()
     {
         Color32[] mask           = _biomes;     // TODO: use selector
-        Color32   maskClearColor = AbyssColor;
+        Color32   maskClearColor = _abyssColor;
+
+        _trace += $"-> RenderTopographicalMap()\n";
 
         if (WorldMap == null)
         {
-            Color32[] canvas = ReplaceColor(null, _biomes, AbyssColor, Color.white);
+            _trace += $"--   ReplaceColor()\n";
+            Color32[] canvas = ReplaceColor(null, _biomes, _abyssColor, Color.white);
 
+            _trace += $"--   RenderWater()\n";
             canvas = RenderWater(canvas, _heights, mask, maskClearColor, _mapSize, 4, 64);
 
             canvas = DarkenLinear(canvas, canvas, 20, mask, maskClearColor);
 
             canvas = DarkenRelative(canvas, canvas, 0.85f, _forest, Color.clear);
 
+            _trace += $"--   RenderContours()\n";
             canvas = RenderContours(canvas, _heights, _contourInterval, 128, mask, maskClearColor, _mapSize);
 
+            _trace += $"--   WorldMap = canvas\n";
             WorldMap = canvas;
         }
 
+        _trace += $"--   RenderFog()\n";
         ExploredMap = RenderFog(null, WorldMap, _explored, mask, maskClearColor, _mapSize, 128, 16);
-
-        return ExploredMap;
     }
 
 
     public static IEnumerable RunAsCoroutine(Action action)
     {
+        _trace += $"-> RunAsCoroutine()\n";
         var thread = new Thread(() => action());
 
+        _trace += $"--   thread.Start()\n";
         thread.Start();
         while (thread.IsAlive)
         {
             yield return null;
         }
+
+        _trace += $"<- RunAsCoroutine()\n";
     }
 
 
