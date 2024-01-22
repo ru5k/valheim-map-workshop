@@ -1385,7 +1385,9 @@ namespace NomapPrinter
             private static Color m_mistlandsColor = new Color(0.60f, 0.40f, 0.60f);  // new Color(0.30f, 0.20f, 0.30f)
             private static Color m_noForestColor  = Color.clear;                     // new Color(0f, 0f, 0f, 0f);
             private static Color m_forestColor    = Color.red;                       // new Color(1f, 0f, 0f, 0f);
+            private static Color m_oceanColor     = Color.blue;                      //
             private static Color m_abyssColor     = Color.black;                     // ::= Color(0f, 0f, 0f, 1f);
+
             private static Color s_worldColor     = Color.magenta;                   // ::= Color(1f, 0f, 1f, 1f);
 
             private static Color32 _deepNorthColor = new Color(0.85f, 0.85f, 1.00f);  // Blueish color
@@ -1562,8 +1564,24 @@ namespace NomapPrinter
                         AbyssColor = m_abyssColor
                     };
 
+                    Log($"[d] new mapmaker trace: {Mapmaker.Trace()}");
+
                     // yet no choice =)
-                    yield return Mapmaker.RunAsCoroutine(() => mapmaker.RenderTopographicalMap());
+                    //yield return Mapmaker.RunAsCoroutine(() => mapmaker.RenderTopographicalMap());
+                    var thread = new Thread(() =>
+                    {
+                        mapmaker.RenderTopographicalMap();
+                    });
+
+                    while (thread.IsAlive)
+                    {
+                        yield return null;
+                    }
+
+                    string trace = Mapmaker.Trace();
+
+                    Log($"[d] mapmaker trace 1: {Mapmaker.Trace()}");
+                    Log($"[d] mapmaker trace 2: {trace}");
 
                     map      = mapmaker.ExploredMap;
                     clearMap = mapmaker.WorldMap;
@@ -1627,6 +1645,7 @@ namespace NomapPrinter
                             {
                                 fileName = Path.Combine(fileDir, GetMapFileName(new[] {ForestMapTag}));
                                 Log($"[i] saving {ForestMapTag} map to file \"{fileName}\"");
+                                File.Delete(fileName);
                                 File.WriteAllBytes(fileName, _forestMap.EncodeAsPNG());
 
                                 _forestMapIsSaved = true;
@@ -1864,7 +1883,7 @@ namespace NomapPrinter
                         }
                     }
 
-                    if (!_worldMap.IsEmpty() && !_biomesMap.IsEmpty() && !_heightMap.IsEmpty())
+                    if (!_worldMap.IsEmpty() && !_biomesMap.IsEmpty() && !_heightMap.IsEmpty() && !_forestMap.IsEmpty())
                     {
                         for (int i = 0, d = 0; i < textureSize; ++i, d += textureSize)
                         {
@@ -1906,7 +1925,7 @@ namespace NomapPrinter
                                     altitudeColors[n].rgba = rgba;
                                 }
 
-                                Color c = GetMaskColor(wx, wy, altitude, biome);  // -> forest
+                                Color32 c = GetForestColor(wx, wy, altitude, biome);  // -> forest
                                 array2[n] = c;
                                 forest[n] = c;
 
@@ -2221,11 +2240,12 @@ namespace NomapPrinter
 
             private static Color GetPixelColor(Heightmap.Biome biome, float height)
             {
-                if (height <= abyssBiomeHeight)
-                {
-                    if (biome != Heightmap.Biome.None)
-                        return Color.clear;
-                }
+                // TODO: what if not using height?
+                //if (height <= abyssBiomeHeight)
+                //{
+                //    if (biome != Heightmap.Biome.None)
+                //        return Color.grey;
+                //}
 
                 //public enum Biome
                 //{
@@ -2251,10 +2271,10 @@ namespace NomapPrinter
                     case Heightmap.Biome.Plains:      return Minimap.instance.m_heathColor;
                     case Heightmap.Biome.AshLands:    return Minimap.instance.m_ashlandsColor;
                     case Heightmap.Biome.DeepNorth:   return m_deepNorthColor;
-                    case Heightmap.Biome.Ocean:       return Color.blue;  // -> const
+                    case Heightmap.Biome.Ocean:       return m_oceanColor;
                     case Heightmap.Biome.Mistlands:   return m_mistlandsColor;
                     default:
-                        return Color.clear;
+                        return Color.grey;
                 }
             }
 
@@ -2288,23 +2308,41 @@ namespace NomapPrinter
                 }
             }
 
-            private static Color GetMaskColor(float wx, float wy, float altitude, Heightmap.Biome biome)
+            private static Color32 GetForestColor(float wx, float wy, float altitude, Heightmap.Biome biome)
             {
                 if (altitude < 0)
-                    return m_noForestColor;
+                    return _noForestColor;
 
                 switch (biome)
                 {
                     case Heightmap.Biome.Meadows:
-                        return WorldGenerator.InForest(new Vector3(wx, 0.0f, wy)) ? m_forestColor : m_noForestColor;
+                        return WorldGenerator.InForest(new Vector3(wx, 0.0f, wy)) ? _forestColor : _noForestColor;
                     case Heightmap.Biome.Plains:
-                        return WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy)) < 0.8f ? m_forestColor : m_noForestColor;
+                        return WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy)) < 0.8f ? _forestColor : _noForestColor;
                     case Heightmap.Biome.BlackForest:
-                        return m_forestColor;
-                    case Heightmap.Biome.Mistlands:
+                        return _forestColor;
+                    //case Heightmap.Biome.Mistlands:
                     default:
-                        return m_noForestColor;
+                        return _noForestColor;
                 }
+            }
+
+            private static Heightmap.Biome CastColorAsBiome(Color32 color)
+            {
+                // TODO: replace this horror with more optimal code - get rid of explicit colors for biomes and unite them with heights and forests
+                // rgba::= ((altitude + 1000) << 5) + (forest << 4) + biomeId[0..10]
+                if (color.rgba == ((Color32)m_abyssColor).rgba                       ) return Heightmap.Biome.None;
+                if (color.rgba == ((Color32)Minimap.instance.m_meadowsColor).rgba    ) return Heightmap.Biome.Meadows;
+                if (color.rgba == ((Color32)Minimap.instance.m_swampColor).rgba      ) return Heightmap.Biome.Swamp;
+                if (color.rgba == ((Color32)Minimap.instance.m_mountainColor).rgba   ) return Heightmap.Biome.Mountain;
+                if (color.rgba == ((Color32)Minimap.instance.m_blackforestColor).rgba) return Heightmap.Biome.BlackForest;
+                if (color.rgba == ((Color32)Minimap.instance.m_heathColor).rgba      ) return Heightmap.Biome.Plains;
+                if (color.rgba == ((Color32)Minimap.instance.m_ashlandsColor).rgba   ) return Heightmap.Biome.AshLands;
+                if (color.rgba == ((Color32)m_deepNorthColor).rgba                   ) return Heightmap.Biome.DeepNorth;
+                if (color.rgba == ((Color32)m_oceanColor).rgba                       ) return Heightmap.Biome.Ocean;
+                if (color.rgba == ((Color32)m_mistlandsColor).rgba                   ) return Heightmap.Biome.Mistlands;
+
+                return Heightmap.Biome.None;
             }
 
             private static void AddPinsOnMap(Color32[] map, int mapSize)
