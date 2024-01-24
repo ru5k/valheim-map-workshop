@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
 using System;
 using UnityEngine;
@@ -35,7 +36,8 @@ public class Mapmaker
     public Color32[] ExploredMap;  // explored map with contours
     //public Color32[] WorldMask;
 
-    private static string _trace;
+    //private static string _trace;
+    private static StringBuilder _trace = new StringBuilder("");
 
 
     public Mapmaker(int mapSize, Color32[] biomes, Color32[] heights, Color32[] forest, Color32[] explored, int contourInterval)
@@ -49,7 +51,8 @@ public class Mapmaker
 
         //_mapPixelCount   = _mapSize * _mapSize;
 
-        _trace = $"Mapmaker(): _mapSize = {_mapSize}, _contourInterval = {_contourInterval}, _biomes.Length = {_biomes.Length}\n";
+        _trace.Clear();
+        _trace.Append($"Mapmaker(): _mapSize = {_mapSize}, _contourInterval = {_contourInterval}, _biomes.Length = {_biomes.Length}\n");
     }
 
 
@@ -77,7 +80,7 @@ public class Mapmaker
 
     public static string Trace()
     {
-        return _trace;
+        return _trace.ToString();
     }
 
     public void RenderTopographicalMap()
@@ -85,49 +88,49 @@ public class Mapmaker
         Color32[] mask           = _biomes;     // TODO: use selector
         Color32   maskClearColor = _abyssColor;
 
-        _trace += $"-> RenderTopographicalMap()\n";
+        _trace.Append($"-> RenderTopographicalMap()\n");
 
         if (WorldMap == null)
         {
-            _trace += $"--   ReplaceColor()\n";
+            _trace.Append($"--   ReplaceColor()\n");
             Color32[] canvas = ReplaceColor(null, _biomes, _abyssColor, Color.white);
 
-            _trace += $"--   RenderWater()\n";
+            _trace.Append($"--   RenderWater()\n");
             canvas = RenderWater(canvas, _heights, mask, maskClearColor, _mapSize, 4, 64);
 
             canvas = DarkenLinear(canvas, canvas, 20, mask, maskClearColor);
 
             canvas = DarkenRelative(canvas, canvas, 0.85f, _forest, Color.clear);
 
-            _trace += $"--   RenderContours()\n";
+            _trace.Append("--   RenderContours()\n");
             canvas = RenderContours(canvas, _heights, _contourInterval, 128, mask, maskClearColor, _mapSize);
 
-            _trace += $"--   WorldMap = canvas\n";
+            _trace.Append("--   WorldMap = canvas\n");
             WorldMap = canvas;
         }
 
-        _trace += $"--   RenderFog()\n";
+        _trace.Append("--   RenderFog()\n");
         ExploredMap = RenderFog(null, WorldMap, _explored, mask, maskClearColor, _mapSize, 128, 16);
     }
 
 
-    public static IEnumerable RunAsCoroutine(Action action)
+    public IEnumerable RunAsCoroutine(Action action)
     {
-        _trace += $"-> RunAsCoroutine()\n";
+        _trace.Append("-> RunAsCoroutine()\n");
         var thread = new Thread(() => action());
 
-        _trace += $"--   thread.Start()\n";
+        _trace.Append("--   thread.Start()\n");
         thread.Start();
         while (thread.IsAlive)
         {
             yield return null;
         }
 
-        _trace += $"<- RunAsCoroutine()\n";
+        _trace.Append("<- RunAsCoroutine()\n");
     }
 
 
-    private static Color32[] RenderContours(Color32[] canvas, Color32[] heights, int interval, byte alpha, Color32[] mask, Color32 maskClearColor, int size)
+    private Color32[] RenderContours(Color32[] canvas, Color32[] heights, int interval, byte alpha, Color32[] mask, Color32 maskClearColor, int size)
     {
         bool noBlending  = canvas == null;
         byte halfAlpha   = (byte)(alpha / 2);
@@ -225,7 +228,7 @@ public class Mapmaker
     }
 
 
-    private static Color32[] RenderWater(Color32[] canvas, Color32[] heights, Color32[] mask, Color32 maskClearColor, int size, int tightness, int damping)
+    private Color32[] RenderWater(Color32[] canvas, Color32[] heights, Color32[] mask, Color32 maskClearColor, int size, int tightness, int damping)
     {
         bool    noBlending = canvas == null;
         Color32 c          = new Color32();
@@ -279,7 +282,7 @@ public class Mapmaker
     }
 
 
-    private static Color32[] RenderFog(Color32[] canvas, Color32[] layer, Color32[] explored, Color32[] mask, Color32 maskClearColor, int size, int tightness, int damping)
+    private Color32[] RenderFog(Color32[] canvas, Color32[] layer, Color32[] explored, Color32[] mask, Color32 maskClearColor, int size, int tightness, int damping)
     {
         canvas = canvas ?? new Color32[explored.Length];
 
@@ -318,7 +321,7 @@ public class Mapmaker
     }
 
 
-    private static Color32[] DarkenLinear(Color32[] canvas, Color32[] layer, byte d, Color32[] mask, Color32 maskClearColor)
+    private Color32[] DarkenLinear(Color32[] canvas, Color32[] layer, byte d, Color32[] mask, Color32 maskClearColor)
     {
         canvas = canvas ?? new Color32[layer.Length];
 
@@ -353,7 +356,7 @@ public class Mapmaker
     }
 
 
-    private static Color32[] DarkenRelative(Color32[] canvas, Color32[] layer, float dimFactor, Color32[] mask, Color32 maskClearColor)
+    private Color32[] DarkenRelative(Color32[] canvas, Color32[] layer, float dimFactor, Color32[] mask, Color32 maskClearColor)
     {
         canvas = canvas ?? new Color32[layer.Length];
 
@@ -378,7 +381,7 @@ public class Mapmaker
     }
 
 
-    private static Color32[] ReplaceColor(Color32[] canvas, Color32[] layer, Color32 from, Color32 to)
+    private Color32[] ReplaceColor(Color32[] canvas, Color32[] layer, Color32 from, Color32 to)
     {
         canvas = canvas ?? new Color32[layer.Length];
 
@@ -397,7 +400,7 @@ public class Mapmaker
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static byte BlendColorChannel(byte c1, byte alpha1, byte c2, byte alpha2, byte alpha)
+    private byte BlendColorChannel(byte c1, byte alpha1, byte c2, byte alpha2, byte alpha)
     {
         //return alpha1 == 0 || alpha2 == 255 ? c2 : (byte)(c2 + (c1 - c2) * (255 - alpha2) * alpha1 / 65025);
         return alpha1 == 0 || alpha2 == 255
@@ -407,7 +410,7 @@ public class Mapmaker
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static byte BlendAlphaChannel(byte alpha1, byte alpha2)
+    private byte BlendAlphaChannel(byte alpha1, byte alpha2)
     {
         return alpha1 == 255 || alpha2 == 0
             ?  alpha1
@@ -420,7 +423,7 @@ public class Mapmaker
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void BlendColor(ref Color32 c, Color32 c1, Color32 c2)
+    private void BlendColor(ref Color32 c, Color32 c1, Color32 c2)
     {
         c.a = BlendAlphaChannel(c1.a, c2.a);
 
@@ -430,7 +433,7 @@ public class Mapmaker
     }
 
 
-    private static Color32[] Blend(Color32[] canvas, Color32[] layer, float factor, bool[] mask)
+    private Color32[] Blend(Color32[] canvas, Color32[] layer, float factor, bool[] mask)
     {
         //Color32 c = new Color32();
         canvas = canvas ?? new Color32[layer.Length];
@@ -458,7 +461,7 @@ public class Mapmaker
     }
 
     // refined copy of IEnumerator OverlayTexture(Color32[] array1, Color32[] array2, bool allMap = false)
-    private static Color32[] BlendByLerp(Color32[] canvas, Color32[] layer, bool[] mask)
+    private Color32[] BlendByLerp(Color32[] canvas, Color32[] layer, bool[] mask)
     {
         canvas = canvas ?? new Color32[layer.Length];
 
