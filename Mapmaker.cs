@@ -98,8 +98,10 @@ public class Mapmaker
             _trace.Append($"--   RenderWater()\n");
             canvas = RenderWater(canvas, _heights, mask, maskClearColor, _mapSize, 4, 64);
 
+            _trace.Append($"--   DarkenLinear()\n");
             canvas = DarkenLinear(canvas, canvas, 20, mask, maskClearColor);
 
+            _trace.Append($"--   DarkenRelative()\n");
             canvas = DarkenRelative(canvas, canvas, 0.85f, _forest, Color.clear);
 
             _trace.Append("--   RenderContours()\n");
@@ -109,7 +111,7 @@ public class Mapmaker
             WorldMap = canvas;
         }
 
-        _trace.Append("--   RenderFog()\n");
+        _trace.Append("--   ExploredMap = RenderFog()\n");
         ExploredMap = RenderFog(null, WorldMap, _explored, mask, maskClearColor, _mapSize, 128, 16);
     }
 
@@ -121,6 +123,7 @@ public class Mapmaker
 
         _trace.Append("--   thread.Start()\n");
         thread.Start();
+        _trace.Append("--   while (thread.IsAlive)\n");
         while (thread.IsAlive)
         {
             yield return null;
