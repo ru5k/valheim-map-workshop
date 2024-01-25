@@ -1611,6 +1611,7 @@ namespace NomapPrinter
                         mapmaker.RenderTopographicalMap();
                     });
 
+                    thread.Start();
                     while (thread.IsAlive)
                     {
                         yield return null;
@@ -1876,6 +1877,7 @@ namespace NomapPrinter
                 int       halfTextureSize = textureSize / 2;
                 float     halfPixelSize   = pixelSize / 2;
                 int       arraySize       = textureSize * textureSize;
+                int       abyssAltitude   = (int)(abyssBiomeHeight - waterLevel);
 
                 Color32[] array  = new Color32[arraySize];  // texture {color}
                 Color[]   array2 = new Color[arraySize];    // forest  {bool}
@@ -1938,17 +1940,19 @@ namespace NomapPrinter
                     }
                     else
                     {
-                        Func<int, float, float, Heightmap.Biome> getBiome;
-                        if (_biomesMap.IsEmpty())
-                            getBiome = (n, wx, wy) => WorldGenerator.instance.GetBiome(wx, wy);
-                        else
-                            getBiome = (n, wx, wy) => CastColorAsBiome(_biomesMap.Colors[n]);
+                        Func<int, float, float, Heightmap.Biome> getBiome = _biomesMap.IsEmpty()
+                            ? (Func<int, float, float, Heightmap.Biome>)((n, wx, wy) => WorldGenerator.instance.GetBiome(wx, wy))
+                            : (Func<int, float, float, Heightmap.Biome>)((n, wx, wy) => CastColorAsBiome(_biomesMap.Colors[n]));
 
-                        Func<int, float, float, float> getHeight;
+                        Func<int, float, float, Heightmap.Biome, int> getAltitude;
                         if (_heightMap.IsEmpty())
-                            getHeight = null;
+                            getAltitude = (n, wx, wy, biome) =>
+                            {
+                                float altitude = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color mask) - waterLevel;
+                                return altitude > 0 ? (int)altitude + 1 : (int)altitude;
+                            };
                         else
-                            getHeight = (n, wx, wy) => _heightMap.Colors[n].rgba;
+                            getAltitude = (n, wx, wy, biome) => _heightMap.Colors[n].rgba;
 
                         for (int i = 0, ti = 0; i < textureSize; ++i, ti += textureSize)
                         {
@@ -1961,55 +1965,45 @@ namespace NomapPrinter
 
                                 float wx = (j - halfTextureSize) * pixelSize + halfPixelSize;
 
-                                Heightmap.Biome biome       = getBiome(n, wx, wy);  //WorldGenerator.instance.GetBiome(wx, wy);
-                                float           biomeHeight = biome == Heightmap.Biome.None ? abyssBiomeHeight - 1 : WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color mask);
-                                float           altitude    = biomeHeight - waterLevel;
-                                int             altitudeInt = (int)altitude;
+                                // All is bad: the 'abyss' does not stand out among biomes - you always need a height
+                                Heightmap.Biome biome    = getBiome(n, wx, wy);
+                                int             altitude = getAltitude(n, wx, wy, biome);
 
-                                if (_maxAltitude < altitudeInt)
-                                    _maxAltitude = altitudeInt;
+                                if (_maxAltitude < altitude)
+                                    _maxAltitude = altitude;
 
-                                if (_minAltitude > altitudeInt)
-                                    _minAltitude = altitudeInt;
+                                if (_minAltitude > altitude)
+                                    _minAltitude = altitude;
+
+                                if (altitude <= abyssAltitude)
+                                {
+                                    biome    = Heightmap.Biome.None;
+                                    altitude = abyssAltitude - 1;
+                                    // abyss => no forest, no forest => no color
+                                }
+                                else
+                                {
+                                    Color32 c = GetForestColor(wx, wy, altitude, biome);
+                                    array2[n] = (Color)c;
+                                    forest[n] = c;
+                                }
+
+                                array[n] = GetBiomeColor(biome);
 
                                 if (altitudes != null && altitudeColors != null)
                                 {
-                                    int rgba = altitude > 0 ? altitudeInt + 1 : altitudeInt;
-                                    altitudes[n].rgba      = rgba;
-                                    altitudeColors[n].rgba = rgba;
+                                    altitudes[n].rgba      = altitude;
+                                    altitudeColors[n].rgba = altitude;
                                 }
-
-                                // TODO: abyss => no forest, no forest => no color
-                                Color32 c = GetForestColor(wx, wy, altitude, biome);  // -> forest
-                                array2[n] = c;
-                                forest[n] = c;
-
-                                // TODO: debug: remove after
-                                array[n] = GetPixelColor(biome, biomeHeight);
-
-                                if (biomeHeight <= abyssBiomeHeight)
-                                {
-                                    // TODO: debug: uncomment after
-                                    //array[n] = m_abyssColor;  // off map biome color
-                                    continue;
-                                }
-
-                                // Biome color
-                                // TODO: debug: uncomment after
-                                //array[n] = GetPixelColor(biome, biomeHeight);
 
                                 // ! Minimap logic shows that biome height < waterLevel is considered as water area
                                 //   => altitude >= 0 should be a land
 
                                 // Downscaled biome height as color
                                 if (altitude > 0)
-                                {
-                                    array3[n] = new Color(altitude / _mapHeightDivider.Value, 0f, 0f);
-                                }
+                                    array3[n] = new Color((float)altitude / _mapHeightDivider.Value, 0f, 0f);
                                 else
-                                {
-                                    array3[n] = new Color(0f, 0f, altitude / -_mapDepthDivider.Value);
-                                }
+                                    array3[n] = new Color(0f, 0f, (float)altitude / -_mapDepthDivider.Value);
 
                                 // Fog map and exploration data
                                 if (!_mapFetchOnlyExplored.Value)
@@ -2299,13 +2293,30 @@ namespace NomapPrinter
 
             private static Color GetPixelColor(Heightmap.Biome biome, float height)
             {
-                // TODO: what if not using height?
-                //if (height <= abyssBiomeHeight)
-                //{
-                //    if (biome != Heightmap.Biome.None)
-                //        return Color.grey;
-                //}
+                if (height <= abyssBiomeHeight)
+                {
+                    return m_abyssColor;
+                }
 
+                switch (biome)
+                {
+                    case Heightmap.Biome.None:        return m_abyssColor;
+                    case Heightmap.Biome.Meadows:     return Minimap.instance.m_meadowsColor;
+                    case Heightmap.Biome.Swamp:       return Minimap.instance.m_swampColor;
+                    case Heightmap.Biome.Mountain:    return Minimap.instance.m_mountainColor;
+                    case Heightmap.Biome.BlackForest: return Minimap.instance.m_blackforestColor;
+                    case Heightmap.Biome.Plains:      return Minimap.instance.m_heathColor;
+                    case Heightmap.Biome.AshLands:    return Minimap.instance.m_ashlandsColor;
+                    case Heightmap.Biome.DeepNorth:   return m_deepNorthColor;
+                    case Heightmap.Biome.Ocean:       return m_oceanColor;
+                    case Heightmap.Biome.Mistlands:   return m_mistlandsColor;
+                    default:
+                        return m_abyssColor;
+                }
+            }
+
+            private static Color GetBiomeColor(Heightmap.Biome biome)
+            {
                 //public enum Biome
                 //{
                 //    None        =   0,
@@ -2333,7 +2344,7 @@ namespace NomapPrinter
                     case Heightmap.Biome.Ocean:       return m_oceanColor;
                     case Heightmap.Biome.Mistlands:   return m_mistlandsColor;
                     default:
-                        return Color.magenta;
+                        return m_abyssColor;
                 }
             }
 
@@ -2367,9 +2378,9 @@ namespace NomapPrinter
                 }
             }
 
-            private static Color32 GetForestColor(float wx, float wy, float altitude, Heightmap.Biome biome)
+            private static Color32 GetForestColor(float wx, float wy, int altitude, Heightmap.Biome biome)
             {
-                if (altitude < 0)
+                if (altitude <= 0)
                     return _noForestColor;
 
                 switch (biome)
@@ -2380,7 +2391,6 @@ namespace NomapPrinter
                         return WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy)) < 0.8f ? _forestColor : _noForestColor;
                     case Heightmap.Biome.BlackForest:
                         return _forestColor;
-                    //case Heightmap.Biome.Mistlands:
                     default:
                         return _noForestColor;
                 }
