@@ -9,13 +9,14 @@ using UnityEngine;
 public class Mapmaker
 {
     //private static readonly Color32 ChartMapColor = new Color32(203, 155,  87, byte.MaxValue);
-    private static readonly Color32 OceanColor    = new Color32( 20, 100, 255, byte.MaxValue);
+    //private static readonly Color32 OceanColor    = new Color32( 20, 100, 255, byte.MaxValue);
     private static readonly Color32 FogColor      = new Color32(203, 155,  87, byte.MaxValue);
 
-    //private int                _mapPixelCount;
     private readonly int       _mapSize;
+    private int                _mapPixelCount;
 
-    private Color32   _abyssColor = new Color32(0, 0, 0, byte.MaxValue);
+    private Color32   _abyssColor = new Color32(  0,   0,   0, byte.MaxValue);
+    private Color32   _oceanColor = new Color32( 20, 100, 255, byte.MaxValue);
 
     //private Color32[] _scenery;       // -> World
     //private Color32[] _contours;
@@ -37,7 +38,7 @@ public class Mapmaker
     //public Color32[] WorldMask;
 
     //private static string _trace;
-    private static StringBuilder _trace = new StringBuilder("");
+    private static readonly StringBuilder _trace = new StringBuilder("");
 
 
     public Mapmaker(int mapSize, Color32[] biomes, Color32[] heights, Color32[] forest, Color32[] explored, int contourInterval)
@@ -49,7 +50,7 @@ public class Mapmaker
         _explored        = explored;
         _contourInterval = contourInterval;
 
-        //_mapPixelCount   = _mapSize * _mapSize;
+        _mapPixelCount   = _mapSize * _mapSize;
 
         _trace.Clear();
         _trace.Append($"Mapmaker(): _mapSize = {_mapSize}, _contourInterval = {_contourInterval}, _biomes.Length = {_biomes.Length}\n");
@@ -75,6 +76,13 @@ public class Mapmaker
                 // TODO: invalidate
             }
         }
+    }
+
+
+    public Color32 OceanColor
+    {
+        get => _oceanColor;
+        set => _oceanColor.rgba = value.rgba;
     }
 
 
@@ -113,6 +121,46 @@ public class Mapmaker
 
         _trace.Append("--   ExploredMap = RenderFog()\n");
         ExploredMap = RenderFog(null, WorldMap, _explored, mask, maskClearColor, _mapSize, 128, 16);
+
+        _trace.Append($"<- RenderTopographicalMap()\n");
+    }
+
+
+    public void RenderTopographicalMapLegacy()
+    {
+        Color32[] mask           = _biomes;     // TODO: use selector
+        Color32   maskClearColor = _abyssColor;
+
+        _trace.Append($"-> RenderTopographicalMapLegacy()\n");
+
+        if (WorldMap == null)
+        {
+            _trace.Append($"--   ReplaceColor()\n");
+            Color32[] canvas = ReplaceColor(null, _biomes, _abyssColor, Color.white);
+
+            _trace.Append($"--   RenderWater()\n");
+            canvas = RenderWater(canvas, _heights, mask, maskClearColor, _mapSize, 4, 64);
+
+            _trace.Append($"--   DarkenLinear()\n");
+            canvas = DarkenLinear(canvas, canvas, 20, mask, maskClearColor);
+
+            _trace.Append($"--   DarkenRelative()\n");
+            canvas = DarkenRelative(canvas, canvas, 0.85f, _forest, Color.clear);
+
+            _trace.Append("--   RenderContoursLegacy()\n");
+            Color32[] contours = RenderContoursLegacy(null, _heights, _contourInterval, 128, mask, maskClearColor);
+
+            _trace.Append("--   Blend()\n");
+            canvas = Blend(canvas, contours, 1, null);
+
+            _trace.Append("--   WorldMap = canvas\n");
+            WorldMap = canvas;
+        }
+
+        _trace.Append("--   ExploredMap = RenderFog()\n");
+        ExploredMap = RenderFog(null, WorldMap, _explored, mask, maskClearColor, _mapSize, 128, 16);
+
+        _trace.Append($"<- RenderTopographicalMapLegacy()\n");
     }
 
 
@@ -130,6 +178,65 @@ public class Mapmaker
         }
 
         _trace.Append("<- RunAsCoroutine()\n");
+        yield return null;
+    }
+
+
+    private Color32[] RenderContoursLegacy(Color32[] canvas, Color32[] heights, int interval, byte alpha, Color32[] mask, Color32 maskClearColor)
+    {
+        Color32[] input  = new Color32[heights.Length];
+
+        canvas = canvas ?? new Color32[heights.Length];  // Color32[] output = new Color32[heights.Length];
+
+        // ! -> input = Array.ConvertAll(start, x => x.b > 0 ? 0 : Math.Min(x.r + graduations, 255));
+        // Shift height values up by graduation so that coast is outlined with a contour line
+        for (int i = 0; i < _mapPixelCount; ++i)
+        {
+            input[i].rgba = heights[i].rgba <= 0 ? (byte)0 : (byte)Math.Min(heights[i].rgba + interval, 255);
+        }
+
+        for (int y = 1; y < _mapSize - 1; y++)
+        {
+            int yCoord = y * _mapSize;
+            for (int x = 1; x < _mapSize - 1; x++)
+            {
+                int testCoord = yCoord + x;                         // Flattened 2D coords of pixel under test
+                int heightRef = input[yCoord + x].rgba / interval;  // Which graduation does the height under test fall under?
+                canvas[testCoord] = Color.clear;                 // Default color is clear
+
+                if (mask != null && mask[testCoord].rgba == maskClearColor.rgba)
+                    continue;
+
+                for (int i = -1; i < 2; i++)
+                {
+                    int iCoord = i * _mapSize;
+                    for (int j = -1; j < 2; j++)
+                    {
+                        if (!((i == 0) && (j == 0)))      //Don't check self
+                        {
+                            int scanCoord = testCoord + iCoord + j;  //Flattened 2D coords of adjacent pixel to be checked
+                            int testHeight = input[scanCoord].rgba / interval;
+
+                            if (testHeight < heightRef)  //Is scanned adjacent coordinate in a lower graduation? //If so, this pixel is black
+                            {
+                                byte alpha2 = alpha;
+                                if ((heightRef % 5) - 1 != 0) alpha2 /= 2;  //Keep full alpha for every 5th graduation line. Half alpha for the rest
+
+                                if ((i != 0) && (j != 0) && (canvas[testCoord].a != alpha2))       //Detected at diagonal
+                                    canvas[testCoord] = new Color32(0, 0, 0, (byte)(alpha2 / 2));   //Gets half alpha for a smoother effect
+                                else                                                    //Detected at orthogonal
+                                {
+                                    canvas[testCoord] = new Color32(0, 0, 0, (byte)(alpha2));   //Gets full alpha
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return canvas;
     }
 
 
@@ -141,13 +248,15 @@ public class Mapmaker
 
         canvas = canvas ?? new Color32[heights.Length];
 
-        Color32[] maskProxy = mask ?? new Color32[1];
-        int       maskInc   = mask != null ? 1 : 0;
+        Color32   blackColor = Color.black;
+        Color32[] maskProxy = mask ?? new Color32[2];
+        int       maskInc   = mask == null ? 0: 1;
+        int       maskSize  = mask == null ? 0: size;
 
         if (mask == null)
         {
             maskClearColor = Color.clear;
-            maskProxy[0]   = Color.white;
+            maskProxy[1]   = Color.white;
         }
 
         int[] contourHeights = Array.ConvertAll(heights, x => x.rgba <= 0 ? 0 : (int)((x.rgba + interval) / interval));
@@ -169,13 +278,13 @@ public class Mapmaker
                         int     *height2    = height1      + size;
                         int     *heightsEnd = heightsBegin + contourHeights.Length - 2*size - 2;
                         Color32 *pixel      = canvasBegin  + size + 1;
-                        Color32 *m          = maskBegin    + size + 1;
+                        Color32 *m          = maskBegin    + maskSize + 1;
                         int      x          = 0;
                         int      xEnd       = size - 2;
 
                         while (height < heightsEnd)
                         {
-                            if (mask == null || m->rgba != maskClearColor.rgba)
+                            if (m->rgba != maskClearColor.rgba)
                             {
                                 int hNW = *(height);
                                 int hN  = *(height  + 1);
@@ -194,6 +303,11 @@ public class Mapmaker
 
                                     if (noBlending)
                                         pixel->a = a;
+                                    else
+                                    {
+                                        blackColor.a = a;
+                                        BlendColor(ref *pixel, *pixel, blackColor);
+                                    }
                                 }
                                 else if (hNW < h || hNE < h || hSW < h || hSE < h)
                                 {
@@ -202,6 +316,11 @@ public class Mapmaker
 
                                     if (noBlending)
                                         pixel->a = a;
+                                    else
+                                    {
+                                        blackColor.a = a;
+                                        BlendColor(ref *pixel, *pixel, blackColor);
+                                    }
                                 }
                             }
 
@@ -221,7 +340,7 @@ public class Mapmaker
                             m += maskInc + maskInc;
 
                             x = 0;
-                        }  // while
+                        }  // while (height < heightsEnd)
                     }  // fixed
                 }  // fixed
             }  // fixed

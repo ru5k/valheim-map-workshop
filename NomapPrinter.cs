@@ -203,7 +203,8 @@ namespace NomapPrinter
         {
             Standard,
             X1,
-            X2
+            X2,
+            X3
         }
 
         private enum MapStyle
@@ -1556,7 +1557,41 @@ namespace NomapPrinter
 
                     MapImageGeneration.DeInitialize();
                 }
-                else  // MapmakerClass.X2
+                else if (_mapMaker.Value == MapmakerClass.X2)
+                {
+                    Mapmaker mapmaker = new Mapmaker(textureSize, m_mapTexture, _altitudes, _forestColors, _explored, _mapContourInterval.Value)
+                    {
+                        WorldMap   = _worldMap.IsEmpty() ? null : _worldMap.Colors,
+                        AbyssColor = m_abyssColor
+                    };
+
+                    Log($"[d] new mapmaker trace: {Mapmaker.Trace()}");
+
+                    // yet no choice =)
+                    //yield return Mapmaker.RunAsCoroutine(() => mapmaker.RenderTopographicalMap());
+                    var thread = new Thread(() =>
+                    {
+                        mapmaker.RenderTopographicalMapLegacy();
+                    });
+
+                    thread.Start();
+                    while (thread.IsAlive)
+                    {
+                        yield return null;
+                    }
+
+                    string[] trace = Mapmaker.Trace().Split('\n');
+
+                    Log($"[d] mapmaker trace 1: {Mapmaker.Trace()}");
+
+                    int i = 0;
+                    foreach(var s in trace)
+                        Log($"[d] mapmaker trace line {++i}: {s}");
+
+                    map      = mapmaker.ExploredMap;
+                    clearMap = mapmaker.WorldMap;
+                }
+                else // if (_mapMaker.Value == MapmakerClass.X3)
                 {
                     Mapmaker mapmaker = new Mapmaker(textureSize, m_mapTexture, _altitudes, _forestColors, _explored, _mapContourInterval.Value)
                     {
