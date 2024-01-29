@@ -1946,7 +1946,7 @@ namespace NomapPrinter
                             getAltitude = (n, wx, wy, biome) =>
                             {
                                 float altitude = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color mask) - waterLevel;
-                                return altitude > 0 ? (int)altitude + 1 : (int)altitude;
+                                return altitude >= 0 ? (int)altitude + 1 : (int)altitude;
                             };
                         else
                             getAltitude = (n, wx, wy, biome) => _heightMap.Colors[n].rgba;
@@ -2003,7 +2003,7 @@ namespace NomapPrinter
                                     array3[n] = new Color(0f, 0f, (float)altitude / -_mapDepthDivider.Value);
 
                                 // Fog map and exploration data
-                                if (!_mapFetchOnlyExplored.Value)
+                                if (!_mapFetchOnlyExplored.Value && altitude > abyssAltitude)
                                 {
                                     //Color pixel = fogTexture.GetPixel(j / scaleFactor, i / scaleFactor);
                                     //bool isFog = pixel.r != 0f && (!showSharedMap.Value || pixel.g != 0f);

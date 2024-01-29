@@ -16,7 +16,8 @@ public class Mapmaker
     private int                _mapPixelCount;
 
     private Color32   _abyssColor = new Color32(  0,   0,   0, byte.MaxValue);
-    private Color32   _oceanColor = new Color32( 20, 100, 255, byte.MaxValue);
+    //private Color32   _oceanColor = new Color32( 20, 100, 255, byte.MaxValue);
+    private Color32  _oceanColor  = new Color32( 10, 136, 193, byte.MaxValue);
 
     //private Color32[] _scenery;       // -> World
     //private Color32[] _contours;
@@ -192,7 +193,7 @@ public class Mapmaker
         // Shift height values up by graduation so that coast is outlined with a contour line
         for (int i = 0; i < _mapPixelCount; ++i)
         {
-            input[i].rgba = heights[i].rgba <= 0 ? (byte)0 : (byte)Math.Min(heights[i].rgba + interval, 255);
+            input[i].rgba = heights[i].rgba <= 0 ? 0 : heights[i].rgba + interval;
         }
 
         for (int y = 1; y < _mapSize - 1; y++)
