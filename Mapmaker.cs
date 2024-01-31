@@ -31,6 +31,8 @@ public class Mapmaker
     private Color32[] _forest;
     private Color32[] _explored;
 
+    private Color32[] _fogTexture;
+
     private readonly int       _contourInterval;
 
     //public Color32[] World;        // entire world map
@@ -54,7 +56,7 @@ public class Mapmaker
         _mapPixelCount   = _mapSize * _mapSize;
 
         _trace.Clear();
-        _trace.Append($"Mapmaker(): _mapSize = {_mapSize}, _contourInterval = {_contourInterval}, _biomes.Length = {_biomes.Length}\n");
+        _trace.Append($"Mapmaker(): _mapSize = {_mapSize}, _mapPixelCount = {_mapPixelCount}, _contourInterval = {_contourInterval}\n");
     }
 
 
@@ -66,7 +68,7 @@ public class Mapmaker
     //    _explored = null;
     //}
 
-    public Color32   AbyssColor
+    public Color32 AbyssColor
     {
         get => _abyssColor;
         set
@@ -84,6 +86,12 @@ public class Mapmaker
     {
         get => _oceanColor;
         set => _oceanColor.rgba = value.rgba;
+    }
+
+
+    public Color32[] FogTexture
+    {
+        set => _fogTexture = value;
     }
 
 
@@ -105,7 +113,7 @@ public class Mapmaker
             Color32[] canvas = ReplaceColor(null, _biomes, _abyssColor, Color.white);
 
             _trace.Append($"--   RenderWater()\n");
-            canvas = RenderWater(canvas, _heights, mask, maskClearColor, _mapSize, 4, 64);
+            canvas = RenderWater(canvas, _heights, mask, maskClearColor, _mapSize, 4, 8, 1.0f);
 
             _trace.Append($"--   DarkenLinear()\n");
             canvas = DarkenLinear(canvas, canvas, 20, mask, maskClearColor);
@@ -120,8 +128,16 @@ public class Mapmaker
             WorldMap = canvas;
         }
 
-        _trace.Append("--   ExploredMap = RenderFog()\n");
-        ExploredMap = RenderFog(null, WorldMap, _explored, mask, maskClearColor, _mapSize, 128, 16);
+        if (_fogTexture == null)
+        {
+            _trace.Append("--   ExploredMap = RenderFog()\n");
+            ExploredMap = RenderFog(null, WorldMap, _explored, mask, maskClearColor, _mapSize, 128, 16);
+        }
+        else
+        {
+            _trace.Append("--   ExploredMap = RenderFogTexture()\n");
+            ExploredMap = RenderFogTexture(null, WorldMap, _explored, mask, maskClearColor);
+        }
 
         _trace.Append($"<- RenderTopographicalMap()\n");
     }
@@ -140,7 +156,7 @@ public class Mapmaker
             Color32[] canvas = ReplaceColor(null, _biomes, _abyssColor, Color.white);
 
             _trace.Append($"--   RenderWater()\n");
-            canvas = RenderWater(canvas, _heights, mask, maskClearColor, _mapSize, 4, 64);
+            canvas = RenderWater(canvas, _heights, mask, maskClearColor, _mapSize, 4, 4, 0.5f);
 
             _trace.Append($"--   DarkenLinear()\n");
             canvas = DarkenLinear(canvas, canvas, 20, mask, maskClearColor);
@@ -165,7 +181,7 @@ public class Mapmaker
     }
 
 
-    public IEnumerable RunAsCoroutine(Action action)
+    public static IEnumerable RunAsCoroutine(Action action)
     {
         _trace.Append("-> RunAsCoroutine()\n");
         var thread = new Thread(() => action());
@@ -250,9 +266,9 @@ public class Mapmaker
         canvas = canvas ?? new Color32[heights.Length];
 
         Color32   blackColor = Color.black;
-        Color32[] maskProxy = mask ?? new Color32[2];
-        int       maskInc   = mask == null ? 0: 1;
-        int       maskSize  = mask == null ? 0: size;
+        Color32[] maskProxy  = mask ?? new Color32[2];
+        int       maskInc    = mask == null ? 0: 1;
+        int       maskSize   = mask == null ? 0: size;
 
         if (mask == null)
         {
@@ -351,12 +367,17 @@ public class Mapmaker
     }
 
 
-    private Color32[] RenderWater(Color32[] canvas, Color32[] heights, Color32[] mask, Color32 maskClearColor, int size, int tightness, int damping)
+    private Color32[] RenderWater(Color32[] canvas, Color32[] heights, Color32[] mask, Color32 maskClearColor, int size, int tightness, int noiseAmplitude, float noiseOffset = 0)
     {
         bool    noBlending = canvas == null;
         Color32 c          = new Color32();
 
         canvas = canvas ?? new Color32[heights.Length];
+
+        if (noiseOffset > 1)
+            noiseOffset = 1;
+        else if (noiseOffset < 0)
+            noiseOffset = 0;
 
         for (int i = 0; i < heights.Length; ++i)
         {
@@ -375,10 +396,10 @@ public class Mapmaker
 
                 ref Color32 pixel = ref canvas[i];
 
-                if (tightness > 0 && damping > 0)
+                if (tightness > 0 && noiseAmplitude > 0)
                 {
-                    float noise = Mathf.PerlinNoise((float)(i / size) / tightness, (float)(i % size) / tightness) - 0.5f;
-                    byte  delta = (byte)(255 * noise / damping);
+                    float noise = Mathf.PerlinNoise((float)(i / size) / tightness, (float)(i % size) / tightness) - noiseOffset;
+                    byte  delta = (byte)(noiseAmplitude * noise);
                     c.r = (byte)(OceanColor.r + delta);
                     c.g = (byte)(OceanColor.g + delta);
                     c.b = (byte)(OceanColor.b + delta);
@@ -438,6 +459,44 @@ public class Mapmaker
             {
                 pixel.rgba = FogColor.rgba;
             }
+        }
+
+        return canvas;
+    }
+
+
+    private Color32[] RenderFogTexture(Color32[] canvas, Color32[] layer, Color32[] explored, Color32[] mask, Color32 maskClearColor)
+    {
+        canvas = canvas ?? new Color32[explored.Length];
+
+        if (_fogTexture == null)
+            return canvas;
+
+        int textureSize = (int)Math.Sqrt(_fogTexture.Length);
+
+        for (int i = 0; i < explored.Length; ++i)
+        {
+            if (mask != null && mask[i].rgba == maskClearColor.rgba)
+            {
+                canvas[i] = layer[i];
+                continue;
+            }
+
+            if (explored[i].a > 0)
+            {
+                canvas[i] = layer[i];
+                continue;
+            }
+
+            ref Color32 pixel = ref canvas[i];
+
+            int x  = i / _mapSize;
+            int y  = i % _mapSize;
+
+            int tx = x % textureSize;
+            int ty = y % textureSize;
+
+            pixel.rgba = _fogTexture[tx * textureSize + ty].rgba;
         }
 
         return canvas;
