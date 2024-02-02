@@ -102,10 +102,13 @@ public class Mapmaker
 
     public void RenderTopographicalMap()
     {
-        Color32[] mask           = _biomes;     // TODO: use selector
+        Color32[] mask           = _biomes;      // TODO: use selector to render only explored map area
         Color32   maskClearColor = _abyssColor;
 
         _trace.Append($"-> RenderTopographicalMap()\n");
+
+        // _trace.Append($"--   FillWithColor()\n");
+        // Color32[] fogMask = FillWithColor(null, _biomes, _abyssColor, _explored, Color.clear);
 
         if (WorldMap == null)
         {
@@ -132,11 +135,13 @@ public class Mapmaker
         {
             _trace.Append("--   ExploredMap = RenderFog()\n");
             ExploredMap = RenderFog(null, WorldMap, _explored, mask, maskClearColor, _mapSize, 128, 16);
+            // TODO: ExploredMap = RenderPerlinNoise(null, WorldMap, FogColor, fogMask, _abyssColor, 128, 16);
         }
         else
         {
             _trace.Append("--   ExploredMap = RenderFogTexture()\n");
             ExploredMap = RenderFogTexture(null, WorldMap, _explored, mask, maskClearColor);
+            // ExploredMap = RenderTexture(null, WorldMap, _fogTexture, fogMask, _abyssColor);
         }
 
         _trace.Append($"<- RenderTopographicalMap()\n");
@@ -168,7 +173,7 @@ public class Mapmaker
             Color32[] contours = RenderContoursLegacy(null, _heights, _contourInterval, 128, mask, maskClearColor);
 
             _trace.Append("--   Blend()\n");
-            canvas = Blend(canvas, contours, 1, null);
+            canvas = Blend(canvas, contours, null);
 
             _trace.Append("--   WorldMap = canvas\n");
             WorldMap = canvas;
@@ -503,6 +508,39 @@ public class Mapmaker
     }
 
 
+    private Color32[] RenderTexture(Color32[] canvas, Color32[] layer, Color32[] texture, Color32[] mask, Color32 maskClearColor)
+    {
+        canvas = canvas ?? new Color32[layer.Length];
+
+        if (texture == null)
+            return canvas;
+
+        int textureSize = (int)Math.Sqrt(texture.Length);  // assert(texture.Length == textureSize * textureSize)
+
+        for (int i = 0; i < layer.Length; ++i)
+        {
+            if (mask != null && mask[i].rgba == maskClearColor.rgba)
+            {
+                canvas[i] = layer[i];
+                continue;
+            }
+
+            ref Color32 pixel = ref canvas[i];
+
+            int x  = i / _mapSize;
+            int y  = i % _mapSize;
+
+            int tx = x % textureSize;
+            int ty = y % textureSize;
+
+            //pixel.rgba = texture[tx * textureSize + ty].rgba;
+            BlendColor(ref pixel, pixel, texture[tx * textureSize + ty]);
+        }
+
+        return canvas;
+    }
+
+
     private Color32[] DarkenLinear(Color32[] canvas, Color32[] layer, byte d, Color32[] mask, Color32 maskClearColor)
     {
         canvas = canvas ?? new Color32[layer.Length];
@@ -581,6 +619,25 @@ public class Mapmaker
     }
 
 
+    private Color32[] FillWithColor(Color32[] canvas, Color32[] layer, Color32 color, Color32[] mask = null, Color32 maskClearColor = new Color32())
+    {
+        canvas = canvas ?? new Color32[layer.Length];
+
+        for (int i = 0; i < layer.Length; ++i)
+        {
+            if (mask != null && mask[i].rgba == maskClearColor.rgba)
+            {
+                canvas[i] = layer[i];
+                continue;
+            }
+
+            canvas[i] = color;
+        }
+
+        return canvas;
+    }
+
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private byte BlendColorChannel(byte c1, byte alpha1, byte c2, byte alpha2, byte alpha)
     {
@@ -615,14 +672,14 @@ public class Mapmaker
     }
 
 
-    private Color32[] Blend(Color32[] canvas, Color32[] layer, float factor, bool[] mask)
+    private Color32[] Blend(Color32[] canvas, Color32[] layer, Color32[] mask = null, Color32 maskClearColor = new Color32())
     {
         //Color32 c = new Color32();
         canvas = canvas ?? new Color32[layer.Length];
 
         for (int i = 0; i < canvas.Length; ++i)
         {
-            if (mask != null && !mask[i])
+            if (mask != null && mask[i].rgba == maskClearColor.rgba)
                 continue;
 
             Color32 c1 = canvas[i];

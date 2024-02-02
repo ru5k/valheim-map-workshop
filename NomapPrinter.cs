@@ -1448,29 +1448,25 @@ namespace NomapPrinter
             private static Color m_oceanColor     = Color.blue;                      //
             private static Color m_abyssColor     = Color.black;                     // ::= Color(0f, 0f, 0f, 1f);
 
-            //private static Color s_worldColor     = Color.magenta;                   // ::= Color(1f, 0f, 1f, 1f);
-
-            private static Color32 _abyssColor       = Color.black;                     // new Color(0f, 0f, 0f, 1f);
-            private static Color32 _meadowsColor     = Minimap.instance.m_meadowsColor;
-            private static Color32 _swampColor       = Minimap.instance.m_swampColor;
-            private static Color32 _mountainColor    = Minimap.instance.m_mountainColor;
-            private static Color32 _blackForestColor = Minimap.instance.m_blackforestColor;
-            private static Color32 _plainsColor      = Minimap.instance.m_heathColor;
-            private static Color32 _ashlandsColor    = Minimap.instance.m_ashlandsColor;
-            private static Color32 _deepNorthColor   = new Color(0.85f, 0.85f, 1.00f);  // Blueish color
+            private static Color32 _abyssColor       = Color.black;
+            private static Color32 _meadowsColor     = new Color(0.4f, 1.0f, 0.4f);  // Minimap.instance.m_meadowsColor;
+            private static Color32 _swampColor       = new Color(0.6f, 0.5f, 0.5f);  // Minimap.instance.m_swampColor;
+            private static Color32 _mountainColor    = new Color(1.0f, 1.0f, 1.0f);  // Minimap.instance.m_mountainColor;
+            private static Color32 _blackForestColor = new Color(0.0f, 0.7f, 0.0f);  // Minimap.instance.m_blackforestColor;
+            private static Color32 _plainsColor      = new Color(1.0f, 1.0f, 0.2f);  // Minimap.instance.m_heathColor;
+            private static Color32 _ashlandsColor    = new Color(1.0f, 0.2f, 0.2f);  // Minimap.instance.m_ashlandsColor;
+            private static Color32 _deepNorthColor   = new Color(0.9f, 0.9f, 1.0f);  // Blueish color
             private static Color32 _oceanColor       = Color.blue;                      //
             private static Color32 _mistlandsColor   = new Color(0.60f, 0.40f, 0.60f);  // new Color(0.30f, 0.20f, 0.30f)
 
-            private static Color32 _noForestColor    = Color.clear;                     // new Color(0f, 0f, 0f, 0f);
-            private static Color32 _forestColor      = Color.green;                     // new Color(1f, 0f, 0f, 0f);
+            private static Color32 _clearColor       = Color.clear;
+            private static Color32 _noForestColor    = Color.clear;
+            private static Color32 _forestColor      = Color.red;
 
             //private static Color32 _worldColor       = Color.magenta;                   // new Color(1f, 0f, 1f, 1f);
 
             private static int   _maxAltitude = Int32.MinValue;
             private static int   _minAltitude = Int32.MaxValue;
-
-            //private static int   _maxHeight = Int32.MinValue;
-            //private static int   _minHeight = Int32.MaxValue;
 
             public IEnumerator Go()
             {
@@ -1988,7 +1984,7 @@ namespace NomapPrinter
                         }
                     }
 
-                    if (!_worldMap.IsEmpty() && !_biomesMap.IsEmpty() && !_heightMap.IsEmpty() && !_forestMap.IsEmpty())
+                    if (!_biomesMap.IsEmpty() && !_heightMap.IsEmpty() && !_forestMap.IsEmpty())
                     {
                         for (int i = 0, d = 0; i < textureSize; ++i, d += textureSize)
                         {
@@ -1996,7 +1992,7 @@ namespace NomapPrinter
                             {
                                 bool isExplored = IsExplored(j / scaleFactor, i / scaleFactor);
                                 exploration[d + j] = isExplored;
-                                explored[d + j]    = isExplored ? _forestColor : _noForestColor;
+                                explored[d + j]    = isExplored ? _forestColor : _clearColor;
                             }
                         }
                     }
@@ -2006,15 +2002,24 @@ namespace NomapPrinter
                             ? (Func<int, float, float, Heightmap.Biome>)((n, wx, wy) => WorldGenerator.instance.GetBiome(wx, wy))
                             : (Func<int, float, float, Heightmap.Biome>)((n, wx, wy) => CastColorAsBiome(_biomesMap.Colors[n]));
 
+                        Func<int, Heightmap.Biome, Color32> getBiomeColor = _biomesMap.IsEmpty()
+                            ? (Func<int, Heightmap.Biome, Color32>)((n, biome) => GetBiomeColor(biome))
+                            : (Func<int, Heightmap.Biome, Color32>)((n, biome) => _biomesMap.Colors[n]);
+
                         Func<int, float, float, Heightmap.Biome, int> getAltitude;
                         if (_heightMap.IsEmpty())
+                        {
                             getAltitude = (n, wx, wy, biome) =>
                             {
-                                float altitude = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color mask) - waterLevel;
+                                float altitude = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color mask) -
+                                                 waterLevel;
                                 return altitude >= 0 ? (int)altitude + 1 : (int)altitude;
                             };
+                        }
                         else
+                        {
                             getAltitude = (n, wx, wy, biome) => _heightMap.Colors[n].rgba;
+                        }
 
                         Func<int, float, float, int, Heightmap.Biome, Color32> getForest;
                         if (_forestMap.IsEmpty())
@@ -2058,7 +2063,7 @@ namespace NomapPrinter
                                         forest[n] = c;
                                 }
 
-                                array[n] = GetBiomeColor(biome);
+                                array[n] = getBiomeColor(n, biome);
 
                                 if (altitudes != null && altitudeColors != null)
                                 {
@@ -2084,7 +2089,7 @@ namespace NomapPrinter
 
                                     bool isExplored = IsExplored(j / scaleFactor, i / scaleFactor);
                                     exploration[n]  = isExplored;
-                                    explored[n]     = isExplored ? _forestColor : _noForestColor;
+                                    explored[n]     = isExplored ? _forestColor : _clearColor;
                                 }
                             }  // for (int j = 0, n = ti; j < textureSize; ++j, ++n)
                         }  // for (int i = 0, ti = 0; i < textureSize; ++i, ti += textureSize)
@@ -2112,9 +2117,20 @@ namespace NomapPrinter
                     yield return null;
                 }
 
-                m_mapTexture    = array;  // = _biomesMap.IsEmpty() ? array : _biomesMap.Colors;
-                m_forestTexture = array2;
-                m_heightmap     = array3;
+                m_mapTexture    = _biomesMap.IsEmpty() ? array : _biomesMap.Colors;
+                m_forestTexture = _forestMap.IsEmpty()
+                    ? array2
+                    : Array.ConvertAll(_forestMap.Colors, x => (Color)x);
+                m_heightmap     = _heightMap.IsEmpty()
+                    ? array3
+                    : Array.ConvertAll(_heightMap.Colors, x =>
+                        {
+                            if (x.rgba > 0)
+                                return (Color32) new Color((float)x.rgba / _mapHeightDivider.Value, 0f, 0f);
+                            return (Color32) new Color(0f, 0f, (float)x.rgba / -_mapDepthDivider.Value);
+                        });
+                m_exploration   = exploration;
+                m_mapData       = mapData;
 
                 if (_heightMap.IsEmpty())
                 {
@@ -2124,9 +2140,6 @@ namespace NomapPrinter
 
                 _forestColors   = forest;
                 _explored       = explored;
-
-                m_exploration   = exploration;
-                m_mapData       = mapData;
             }
 
             private static IEnumerator GetVanillaMap(int resolution)
@@ -2796,19 +2809,30 @@ namespace NomapPrinter
             public TValue NewValue { get; }
         }
 
+
+        private interface IStorage
+        {
+            void   Put(string key, byte[] data);
+            byte[] Get(string key);
+            void   Delete(string key);
+            bool   Exists(string key);
+            void   Clear();
+        }
+
+
         private sealed class ImageContext
         {
             private SquareImage _image;
             private string[]    _tags;
-            private bool        _isSaved;
+            private IStorage    _storage;
 
-            //private IStorage _storage;
+            private bool        _isSaved = false;
 
-            public ImageContext(SquareImage image, string[] tags)
+            public ImageContext(SquareImage image, string[] tags, IStorage storage)
             {
                 _image   = image;
                 _tags    = tags;
-                _isSaved = false;
+                _storage = storage;
             }
 
             public SquareImage Image => _image;
