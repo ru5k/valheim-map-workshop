@@ -17,7 +17,7 @@ public class Mapmaker
 
     private Color32   _abyssColor = new Color32(  0,   0,   0, byte.MaxValue);
     //private Color32   _oceanColor = new Color32( 20, 100, 255, byte.MaxValue);
-    private Color32  _oceanColor  = new Color32( 10, 136, 193, byte.MaxValue);
+    private Color32   _oceanColor  = new Color32( 10, 136, 193, byte.MaxValue);
 
     //private Color32[] _scenery;       // -> World
     //private Color32[] _contours;
@@ -26,14 +26,16 @@ public class Mapmaker
     //private Color32[] _abyss;
     //private Color32[] _abyssTexture;  //
 
-    private Color32[] _biomes;
-    private Color32[] _heights;
-    private Color32[] _forest;
-    private Color32[] _explored;
+    private readonly Color32[] _biomes;
+    private readonly Color32[] _heights;
+    private readonly Color32[] _forest;
+    private readonly Color32[] _explored;
 
     private Color32[] _fogTexture;
 
     private readonly int       _contourInterval;
+    private readonly int       _isobathInterval;
+    //private readonly bool      _drawIsobaths;
 
     //public Color32[] World;        // entire world map
     public Color32[] WorldMap;     // entire world map with contours
@@ -44,7 +46,7 @@ public class Mapmaker
     private static readonly StringBuilder _trace = new StringBuilder("");
 
 
-    public Mapmaker(int mapSize, Color32[] biomes, Color32[] heights, Color32[] forest, Color32[] explored, int contourInterval)
+    public Mapmaker(int mapSize, Color32[] biomes, Color32[] heights, Color32[] forest, Color32[] explored, int contourInterval, int isobathInterval)
     {
         _mapSize         = mapSize;
         _biomes          = biomes;
@@ -52,6 +54,8 @@ public class Mapmaker
         _forest          = forest;
         _explored        = explored;
         _contourInterval = contourInterval;
+        _isobathInterval = isobathInterval;
+        //_drawIsobaths    = drawIsobaths;
 
         _mapPixelCount   = _mapSize * _mapSize;
 
@@ -124,8 +128,11 @@ public class Mapmaker
             _trace.Append($"--   DarkenRelative()\n");
             canvas = DarkenRelative(canvas, canvas, 0.85f, _forest, Color.clear);
 
-            _trace.Append("--   RenderContours()\n");
-            canvas = RenderContours(canvas, _heights, _contourInterval, 128, mask, maskClearColor, _mapSize);
+            if (_contourInterval > 0 || _isobathInterval > 0)
+            {
+                _trace.Append("--   RenderContours()\n");
+                canvas = RenderContours(canvas, _heights, _contourInterval, _isobathInterval, 128, mask, maskClearColor, _mapSize);
+            }
 
             _trace.Append("--   WorldMap = canvas\n");
             WorldMap = canvas;
@@ -169,11 +176,14 @@ public class Mapmaker
             _trace.Append($"--   DarkenRelative()\n");
             canvas = DarkenRelative(canvas, canvas, 0.85f, _forest, Color.clear);
 
-            _trace.Append("--   RenderContoursLegacy()\n");
-            Color32[] contours = RenderContoursLegacy(null, _heights, _contourInterval, 128, mask, maskClearColor);
+            if (_contourInterval > 0)
+            {
+                _trace.Append("--   RenderContoursLegacy()\n");
+                Color32[] contours = RenderContoursLegacy(null, _heights, _contourInterval, 128, mask, maskClearColor);
 
-            _trace.Append("--   Blend()\n");
-            canvas = Blend(canvas, contours, null);
+                _trace.Append("--   Blend()\n");
+                canvas = Blend(canvas, contours, null);
+            }
 
             _trace.Append("--   WorldMap = canvas\n");
             WorldMap = canvas;
@@ -262,7 +272,7 @@ public class Mapmaker
     }
 
 
-    private Color32[] RenderContours(Color32[] canvas, Color32[] heights, int interval, byte alpha, Color32[] mask, Color32 maskClearColor, int size)
+    private Color32[] RenderContours(Color32[] canvas, Color32[] heights, int interval, int isobathInterval, byte alpha, Color32[] mask, Color32 maskClearColor, int size)
     {
         bool noBlending  = canvas == null;
         byte halfAlpha   = (byte)(alpha / 2);
@@ -281,7 +291,11 @@ public class Mapmaker
             maskProxy[1]   = Color.white;
         }
 
-        int[] contourHeights = Array.ConvertAll(heights, x => x.rgba <= 0 ? 0 : (int)((x.rgba + interval) / interval));
+        int[] contourHeights = isobathInterval > 0
+            ? interval > 0
+                ? Array.ConvertAll(heights, x => x.rgba <= 0 ? x.rgba / isobathInterval : (x.rgba + interval) / interval)
+                : Array.ConvertAll(heights, x => x.rgba <= 0 ? x.rgba / isobathInterval : 0)
+            : Array.ConvertAll(heights, x => x.rgba <= 0 ? 0                        : (x.rgba + interval) / interval);
 
         unsafe
         {
@@ -405,9 +419,9 @@ public class Mapmaker
                 {
                     float noise = Mathf.PerlinNoise((float)(i / size) / tightness, (float)(i % size) / tightness) - noiseOffset;
                     byte  delta = (byte)(noiseAmplitude * noise);
-                    c.r = (byte)(OceanColor.r + delta);
-                    c.g = (byte)(OceanColor.g + delta);
-                    c.b = (byte)(OceanColor.b + delta);
+                    c.r = (byte)(_oceanColor.r + delta);
+                    c.g = (byte)(_oceanColor.g + delta);
+                    c.b = (byte)(_oceanColor.b + delta);
                 }
                 else
                 {

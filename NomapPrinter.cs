@@ -14,6 +14,13 @@ using UnityEngine.UI;
 using ServerSync;
 using UnityEngine.Experimental.Rendering;
 
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using UnityEngine.Bindings;
+using UnityEngine.Scripting;
+
+
 namespace NomapPrinter
 {
     [BepInPlugin(pluginID, pluginName, pluginVersion)]
@@ -63,6 +70,8 @@ namespace NomapPrinter
         private static ConfigEntry<int>      _mapHeightDivider;
         private static ConfigEntry<int>      _mapDepthDivider;
         private static ConfigEntry<int>      _mapContourInterval;
+        private static ConfigEntry<int>      _mapIsobathInterval;
+        private static ConfigEntry<bool>     _mapUseWorldRadius;
         private static ConfigEntry<bool>     _mapFetchOnlyExplored;
 
         private static ConfigEntry<int> heightmapFactor;
@@ -158,6 +167,8 @@ namespace NomapPrinter
         private static bool        _worldMapIsSaved  = false;
 
         private static SquareImage _fogTexture       = new SquareImage();
+        private static SquareImage _waterTexture     = new SquareImage();
+        private static SquareImage _oceanTexture     = new SquareImage();
 
         private static SquareImage _sqrImage         = new SquareImage();
 
@@ -546,6 +557,8 @@ namespace NomapPrinter
             _mapHeightDivider     = configLocal("Mapmaker.x", "HeightDivider",     512,              "Original height value divider.");
             _mapDepthDivider      = configLocal("Mapmaker.x", "DepthDivider",      512,              "Original depth value divider.");
             _mapContourInterval   = configLocal("Mapmaker.x", "ContourInterval",   8,                "Contour interval.");
+            _mapIsobathInterval   = configLocal("Mapmaker.x", "IsobathInterval",   0,                "Isobath interval.");
+            _mapUseWorldRadius    = configLocal("Mapmaker.x", "UseWorldRadius",    false,            "Calculate and use world radius to narrow fetching of biomes and heights.");
             _mapFetchOnlyExplored = configLocal("Mapmaker.x", "FetchOnlyExplored", true,             "Fetch map data only for explored area.");
 
             messageStart = config("Messages", "Drawing begin", "Remembering travels...", "Center message when drawing is started. [Not Synced with Server]", false);
@@ -958,16 +971,20 @@ namespace NomapPrinter
 
                     if (!BitConverter.IsLittleEndian)
                     {
+                        Color32Flipper flipper = new Color32Flipper();
+
                         for (int n = 0; n < _altitudes.Length; ++n)
                         {
-                            ref Color32 color  = ref _altitudes[n];
-                            ref Color32 source = ref _heightMapColors[n];
+                            //ref Color32 color  = ref _altitudes[n];
+                            //ref Color32 source = ref _heightMapColors[n];
 
                             // (color.a, color.b, color.g, color.r) = (source.r, source.g, source.b, source.a);
-                            color.a = source.r;
-                            color.b = source.g;
-                            color.g = source.b;
-                            color.r = source.a;
+                            //color.a = source.r;
+                            //color.b = source.g;
+                            //color.g = source.b;
+                            //color.r = source.a;
+
+                            _altitudes[n].rgba = flipper.Flip(_heightMapColors[n]);
                         }
                     }
                     else
@@ -981,12 +998,31 @@ namespace NomapPrinter
                     Log($"[d] refreshed altitudes from heights map image");
                 }
 
+                if (!_forestMap.IsEmpty())
+                    _forestColors = _forestMap.Colors;
+
                 if (_fogTexture.IsEmpty())
                 {
                     Log($"[d] fog texture is empty - trying to load it from file");
                     _fogTexture.DecodeAsPNG(ReadFile(Path.Combine(GetMapFileDir(), "valheim-map-fog-texture.png")));
                     if (!_fogTexture.IsEmpty())
                         Log($"[i] loaded fog texture from file");
+                }
+
+                if (_waterTexture.IsEmpty())
+                {
+                    Log($"[d] water texture is empty - trying to load it from file");
+                    _waterTexture.DecodeAsPNG(ReadFile(Path.Combine(GetMapFileDir(), "valheim-map-water-texture.png")));
+                    if (!_waterTexture.IsEmpty())
+                        Log($"[i] loaded water texture from file");
+                }
+
+                if (_oceanTexture.IsEmpty())
+                {
+                    Log($"[d] ocean texture is empty - trying to load it from file");
+                    _oceanTexture.DecodeAsPNG(ReadFile(Path.Combine(GetMapFileDir(), "valheim-map-ocean-texture.png")));
+                    if (!_oceanTexture.IsEmpty())
+                        Log($"[i] loaded ocean texture from file");
                 }
             }
 
@@ -1431,6 +1467,32 @@ namespace NomapPrinter
         }
 
 
+        private class Color32Flipper
+        {
+            private Color32 _color = new Color32(0, 0, 0, 0);
+
+            public int Flip(Color32 color)
+            {
+                _color.r = color.a;
+                _color.g = color.b;
+                _color.b = color.g;
+                _color.a = color.r;
+
+                return _color.rgba;
+            }
+
+            public void Flip(ref Color32 color)
+            {
+                _color.r = color.a;
+                _color.g = color.b;
+                _color.b = color.g;
+                _color.a = color.r;
+
+                color.rgba = _color.rgba;
+            }
+        }
+
+
         private class MapGeneration : MonoBehaviour
         {
             public bool working = false;
@@ -1449,15 +1511,36 @@ namespace NomapPrinter
             private static Color m_abyssColor     = Color.black;                     // ::= Color(0f, 0f, 0f, 1f);
 
             private static Color32 _abyssColor       = Color.black;
-            private static Color32 _meadowsColor     = new Color(0.4f, 1.0f, 0.4f);  // Minimap.instance.m_meadowsColor;
-            private static Color32 _swampColor       = new Color(0.6f, 0.5f, 0.5f);  // Minimap.instance.m_swampColor;
-            private static Color32 _mountainColor    = new Color(1.0f, 1.0f, 1.0f);  // Minimap.instance.m_mountainColor;
-            private static Color32 _blackForestColor = new Color(0.0f, 0.7f, 0.0f);  // Minimap.instance.m_blackforestColor;
-            private static Color32 _plainsColor      = new Color(1.0f, 1.0f, 0.2f);  // Minimap.instance.m_heathColor;
-            private static Color32 _ashlandsColor    = new Color(1.0f, 0.2f, 0.2f);  // Minimap.instance.m_ashlandsColor;
-            private static Color32 _deepNorthColor   = new Color(0.9f, 0.9f, 1.0f);  // Blueish color
-            private static Color32 _oceanColor       = Color.blue;                      //
-            private static Color32 _mistlandsColor   = new Color(0.60f, 0.40f, 0.60f);  // new Color(0.30f, 0.20f, 0.30f)
+
+            private static Color32 _meadowsColor     = new Color32(146, 167,  92, 255);
+            private static Color32 _swampColor       = new Color32(163, 114,  88, 255);
+            private static Color32 _mountainColor    = new Color32(255, 255, 255, 255);
+            private static Color32 _blackForestColor = new Color32(107, 116,  63, 255);
+            private static Color32 _plainsColor      = new Color32(231, 171, 120, 255);
+            private static Color32 _ashLandsColor    = new Color32(176,  49,  49, 255);
+            private static Color32 _deepNorthColor   = new Color32(230, 230, 255, 255);  // Blueish color
+            private static Color32 _oceanColor       = new Color32(100, 110, 140, 255);
+            private static Color32 _mistlandsColor   = new Color32(153, 102, 153, 255);
+
+            private static Color32 _fogColor         = new Color32(180, 160, 115, 255);
+
+            //private static Color32 _meadowsColor     = new Color(0.4f, 1.0f, 0.4f);
+            //private static Color32 _swampColor       = new Color(0.6f, 0.5f, 0.5f);
+            //private static Color32 _mountainColor    = new Color(1.0f, 1.0f, 1.0f);
+            //private static Color32 _blackForestColor = new Color(0.0f, 0.7f, 0.0f);
+            //private static Color32 _plainsColor      = new Color(1.0f, 1.0f, 0.2f);
+            //private static Color32 _ashlandsColor    = new Color(1.0f, 0.2f, 0.2f);
+            //private static Color32 _deepNorthColor   = new Color(0.9f, 0.9f, 1.0f);  // Blueish color
+            //private static Color32 _oceanColor       = Color.blue;
+            //private static Color32 _mistlandsColor   = new Color(0.60f, 0.40f, 0.60f);  // new Color(0.30f, 0.20f, 0.30f)
+
+            // day
+            private static Color32 _oceanColor2      = new Color32(120, 120, 120, 255);
+            private static Color32 _oceanColor3      = new Color32(170, 150, 140, 255);
+
+            // night
+            private static Color32 _oceanColor4      = new Color32( 75,  80, 100, 255);
+            private static Color32 _oceanColor5      = new Color32(100,  95, 105, 255);
 
             private static Color32 _clearColor       = Color.clear;
             private static Color32 _noForestColor    = Color.clear;
@@ -1467,6 +1550,7 @@ namespace NomapPrinter
 
             private static int   _maxAltitude = Int32.MinValue;
             private static int   _minAltitude = Int32.MaxValue;
+            private static int   _radius      = 0;
 
             public IEnumerator Go()
             {
@@ -1565,6 +1649,7 @@ namespace NomapPrinter
             }
 
 
+            // Run() is an experimental version of Go()
             public IEnumerator Run()
             {
                 working = true;
@@ -1580,7 +1665,7 @@ namespace NomapPrinter
                 yield return GetMapData();
 
                 stopwatch.Stop();
-                Log($"[d] fetched map data in {stopwatch.ElapsedMilliseconds/1000} sec.: min altitude is {_minAltitude}, max altitude is {_maxAltitude}");
+                Log($"[d] fetched map data in {stopwatch.ElapsedMilliseconds/1000} sec.: min altitude is {_minAltitude}, max altitude is {_maxAltitude}, radius is {_radius}");
 
                 ShowMessage(messageSaving.Value);
 
@@ -1621,10 +1706,10 @@ namespace NomapPrinter
                 }
                 else if (_mapMaker.Value == MapmakerClass.X2)
                 {
-                    Mapmaker mapmaker = new Mapmaker(textureSize, m_mapTexture, _altitudes, _forestColors, _explored, _mapContourInterval.Value)
+                    Mapmaker mapmaker = new Mapmaker(textureSize, m_mapTexture, _altitudes, _forestColors, _explored, _mapContourInterval.Value, _mapIsobathInterval.Value)
                     {
                         WorldMap   = _worldMap.IsEmpty() ? null : _worldMap.Colors,
-                        AbyssColor = m_abyssColor
+                        AbyssColor = _abyssColor
                     };
 
                     // yet no choice =)
@@ -1649,11 +1734,12 @@ namespace NomapPrinter
                 }
                 else // if (_mapMaker.Value == MapmakerClass.X3)
                 {
-                    Mapmaker mapmaker = new Mapmaker(textureSize, m_mapTexture, _altitudes, _forestColors, _explored, _mapContourInterval.Value)
+                    Mapmaker mapmaker = new Mapmaker(textureSize, m_mapTexture, _altitudes, _forestColors, _explored, _mapContourInterval.Value, _mapIsobathInterval.Value)
                     {
                         WorldMap   = _worldMap.IsEmpty() ? null : _worldMap.Colors,
                         FogTexture = _fogTexture.IsEmpty() ? null : _fogTexture.Colors,
-                        AbyssColor = m_abyssColor
+                        AbyssColor = _abyssColor,
+                        OceanColor = _oceanColor
                     };
 
                     // yet no choice =)
@@ -1697,7 +1783,7 @@ namespace NomapPrinter
                         _worldMap.Colors = clearMap;
 
                     // TODO: debug
-                    _sqrImage.Colors = m_mapTexture;
+                    //_sqrImage.Colors = m_mapTexture;
 
                     var internalThread = new Thread(() =>
                     {
@@ -1744,18 +1830,18 @@ namespace NomapPrinter
                                 _forestMapIsSaved = true;
                             }
 
-                            // ! debug +4
+                            // ! debug +11
                             //Texture2D fogTexture = (Texture2D)Minimap.instance.m_mapImageLarge.material.GetTexture("_FogTex");
                             //fileName = Path.Combine(fileDir, GetMapFileName(new[] {GetPlayerName(), "fog"}));
                             //Log($"[i] saving player fog map to file \"{fileName}\"");
                             //File.WriteAllBytes(fileName, ImageConversion.EncodeToPNG(fogTexture));
-
-                            if (!_sqrImage.IsEmpty())
-                            {
-                                fileName = Path.Combine(fileDir, GetMapFileName(new[] {BiomesMapTag, "debug"}));
-                                Log($"[i] saving {BiomesMapTag} debug map to file \"{fileName}\"");
-                                File.WriteAllBytes(fileName, _sqrImage.EncodeAsPNG());
-                            }
+                            //
+                            //if (!_sqrImage.IsEmpty())
+                            //{
+                            //    fileName = Path.Combine(fileDir, GetMapFileName(new[] {BiomesMapTag, "debug"}));
+                            //    Log($"[i] saving {BiomesMapTag} debug map to file \"{fileName}\"");
+                            //    File.WriteAllBytes(fileName, _sqrImage.EncodeAsPNG());
+                            //}
                         }
                         catch (Exception e)
                         {
@@ -1923,6 +2009,19 @@ namespace NomapPrinter
                 m_mapData = mapData;
             }
 
+            /// out:
+            ///   m_mapTexture
+            ///   m_forestTexture + _forestColors
+            ///   m_heightmap     + _altitudes / _heightMapColors
+            ///   m_exploration   + _explored
+            ///   m_mapData
+            ///
+            /// TODO:
+            ///   combine m_exploration and m_mapData in single Color32[] array like it is made for others and self explored areas
+            ///   combine m_mapTexture, m_forestTexture and m_heightmap (we can go deeper and even combine them with m_exploration and m_mapData)
+            ///   calculate abyss area without scanning the whole map (e.g. binary lookup for the worlds radius)
+            ///   support multithreading: we can split map for horizontal chunks
+            ///
             private static IEnumerator GetMapData()
             {
                 int scaleFactor = (int)_mapScale.Value;
@@ -1936,6 +2035,7 @@ namespace NomapPrinter
                 float     halfPixelSize   = pixelSize / 2;
                 int       arraySize       = textureSize * textureSize;
                 int       abyssAltitude   = (int)(abyssBiomeHeight - waterLevel);
+                int       radius2         = 0;
 
                 Color32[] array  = new Color32[arraySize];  // texture {color}
                 Color[]   array2 = new Color[arraySize];    // forest  {bool}
@@ -1943,7 +2043,6 @@ namespace NomapPrinter
                 Color32[] array3 = new Color32[arraySize];  // height  {float}
 
                 Color32[] forest         = !_forestMap.IsEmpty() ? null : new Color32[arraySize];
-                //Color32[] worldMask      = _worldMaskIsReady ? null : new Color32[arraySize];  // world mask {color or bool}
                 Color32[] altitudes      = !_heightMap.IsEmpty() ? null : new Color32[arraySize];
                 Color32[] altitudeColors = !_heightMap.IsEmpty() ? null : new Color32[arraySize];
 
@@ -1952,6 +2051,85 @@ namespace NomapPrinter
                 // ! exploration -> bool[] Minimap.instance.m_explored / bool[] Minimap.instance.m_exploredOthers (with the precision of Minimap.instance.m_textureSize)
                 bool[]    exploration = new bool[arraySize];
                 bool[]    mapData     = _mapFetchOnlyExplored.Value ? new bool[arraySize] : null;
+
+                Func<int, float, float, Heightmap.Biome> getBiome = _biomesMap.IsEmpty()
+                    ? (Func<int, float, float, Heightmap.Biome>)((n, wx, wy) => WorldGenerator.instance.GetBiome(wx, wy))
+                    : (Func<int, float, float, Heightmap.Biome>)((n, wx, wy) => CastColorAsBiome(_biomesMap.Colors[n]));
+
+                Func<int, Heightmap.Biome, Color32> getBiomeColor = _biomesMap.IsEmpty()
+                    ? (Func<int, Heightmap.Biome, Color32>)((n, biome) => GetBiomeColor(biome))
+                    : (Func<int, Heightmap.Biome, Color32>)((n, biome) => _biomesMap.Colors[n]);
+
+                Func<int, float, float, Heightmap.Biome, int> getAltitude;
+                if (_heightMap.IsEmpty())
+                {
+                    getAltitude = (n, wx, wy, biome) =>
+                    {
+                        float altitude = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color mask) - waterLevel;
+                        int result = altitude >= 0 ? (int)altitude + 1 : (int)altitude;
+                        if (result <= abyssAltitude)
+                            return abyssAltitude - 1;
+
+                        return result;
+                    };
+                }
+                else
+                {
+                    getAltitude = (n, wx, wy, biome) => _heightMap.Colors[n].rgba;
+                }
+
+                Func<int, float, float, int, Heightmap.Biome, Color32> getForest;
+                if (_forestMap.IsEmpty())
+                    getForest = (n, wx, wy, altitude,  biome) => GetForestColor(wx, wy, altitude, biome);
+                else
+                    getForest = (n, wx, wy, altitude,  biome) => _forestMap.Colors[n];
+
+                //*/
+                if (_mapUseWorldRadius.Value)
+                {
+                    //int d = halfTextureSize / 2;
+                    int it = halfTextureSize * textureSize;
+                    //int j = d;
+                    int j0 = halfTextureSize;
+                    int j1 = textureSize;
+
+                    Func<int, int> getMapAltitude = (dj) =>
+                    {
+                        const float wy = 0;
+
+                        float wx = (dj - halfTextureSize) * pixelSize + halfPixelSize;  // = halfPixelSize;
+                        int   n  = it + dj;
+
+                        Heightmap.Biome biome    = getBiome(n, wx, wy);            // WorldGenerator.instance.GetBiome(wx, wy);
+                        int             altitude = getAltitude(n, wx, wy, biome);  //
+
+                        return altitude;
+                    };
+
+                    //int h0 = getMapAltitude(j0);
+                    //int h1 = getMapAltitude(j1);
+
+                    while (j1 - j0 > 1)
+                    {
+                        int j = (j1 - j0) / 2;
+                        int h = getMapAltitude(j);
+
+                        if (h > abyssAltitude)
+                        {
+                            j0 = j;
+                            //h0 = h;
+                        }
+                        else
+                        {
+                            j1 = j;
+                            //h1 = h;
+                        }
+                    }
+
+                    _radius = j1 - halfTextureSize + 1;
+                    radius2 = _radius * _radius;
+                }
+                //*/
 
                 var internalThread = new Thread(() =>
                 {
@@ -1993,54 +2171,40 @@ namespace NomapPrinter
                                 bool isExplored = IsExplored(j / scaleFactor, i / scaleFactor);
                                 exploration[d + j] = isExplored;
                                 explored[d + j]    = isExplored ? _forestColor : _clearColor;
+
+                                int altitude = _heightMap.Colors[d + j].rgba;
+
+                                if (_maxAltitude < altitude)
+                                    _maxAltitude = altitude;
+
+                                if (_minAltitude > altitude)
+                                    _minAltitude = altitude;
                             }
                         }
                     }
                     else
                     {
-                        Func<int, float, float, Heightmap.Biome> getBiome = _biomesMap.IsEmpty()
-                            ? (Func<int, float, float, Heightmap.Biome>)((n, wx, wy) => WorldGenerator.instance.GetBiome(wx, wy))
-                            : (Func<int, float, float, Heightmap.Biome>)((n, wx, wy) => CastColorAsBiome(_biomesMap.Colors[n]));
-
-                        Func<int, Heightmap.Biome, Color32> getBiomeColor = _biomesMap.IsEmpty()
-                            ? (Func<int, Heightmap.Biome, Color32>)((n, biome) => GetBiomeColor(biome))
-                            : (Func<int, Heightmap.Biome, Color32>)((n, biome) => _biomesMap.Colors[n]);
-
-                        Func<int, float, float, Heightmap.Biome, int> getAltitude;
-                        if (_heightMap.IsEmpty())
-                        {
-                            getAltitude = (n, wx, wy, biome) =>
-                            {
-                                float altitude = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out Color mask) -
-                                                 waterLevel;
-                                return altitude >= 0 ? (int)altitude + 1 : (int)altitude;
-                            };
-                        }
-                        else
-                        {
-                            getAltitude = (n, wx, wy, biome) => _heightMap.Colors[n].rgba;
-                        }
-
-                        Func<int, float, float, int, Heightmap.Biome, Color32> getForest;
-                        if (_forestMap.IsEmpty())
-                            getForest = (n, wx, wy, altitude,  biome) => GetForestColor(wx, wy, altitude, biome);
-                        else
-                            getForest = (n, wx, wy, altitude,  biome) => _forestMap.Colors[n];
-
                         for (int i = 0, ti = 0; i < textureSize; ++i, ti += textureSize)
                         {
                             float wy = (i - halfTextureSize) * pixelSize + halfPixelSize;
 
                             for (int j = 0, n = ti; j < textureSize; ++j, ++n)
                             {
-                                if (mapData != null && !mapData[n])  // ? what about abyss? check
+                                if (mapData != null && !mapData[n])
                                     continue;
 
                                 float wx = (j - halfTextureSize) * pixelSize + halfPixelSize;
 
+
                                 // All is bad: the 'abyss' does not stand out among biomes - you always need a height
-                                Heightmap.Biome biome    = getBiome(n, wx, wy);
-                                int             altitude = getAltitude(n, wx, wy, biome);
+                                Heightmap.Biome biome    = Heightmap.Biome.None; // = getBiome(n, wx, wy);
+                                int             altitude = abyssAltitude - 1;    // = getAltitude(n, wx, wy, biome);
+
+                                if (radius2 <= 0 || radius2 >= (j - halfTextureSize)*(j - halfTextureSize) + (i - halfTextureSize)*(i - halfTextureSize))
+                                {
+                                    biome    = getBiome(n, wx, wy);
+                                    altitude = getAltitude(n, wx, wy, biome);
+                                }
 
                                 if (_maxAltitude < altitude)
                                     _maxAltitude = altitude;
@@ -2051,7 +2215,7 @@ namespace NomapPrinter
                                 if (altitude <= abyssAltitude)
                                 {
                                     biome    = Heightmap.Biome.None;
-                                    altitude = abyssAltitude - 1;
+                                    //altitude = abyssAltitude - 1;
                                     // abyss => no forest, no forest => no color
                                 }
                                 else
@@ -2096,16 +2260,13 @@ namespace NomapPrinter
 
                         if (!BitConverter.IsLittleEndian && altitudeColors != null)
                         {
+                            Color32Flipper flipper = new Color32Flipper();
+
                             for (int n = 0; n < altitudeColors.Length; ++n)
                             {
-                                ref Color32 color = ref altitudeColors[n];
-                                // (color.a, color.b, color.g, color.r) = (color.r, color.g, color.b, color.a);
-                                byte t = color.a;
-                                color.a = color.r;
-                                color.r = t;
-                                t = color.b;
-                                color.b = color.g;
-                                color.g = t;
+                                //ref Color32 color = ref altitudeColors[n];
+                                //color.rgba = flipper.Flip(color);
+                                flipper.Flip(ref altitudeColors[n]);
                             }
                         }
                     }
@@ -2138,8 +2299,12 @@ namespace NomapPrinter
                     _altitudes       = altitudes;
                 }
 
-                _forestColors   = forest;
-                _explored       = explored;
+                if (_forestMap.IsEmpty())
+                    _forestColors = forest;
+                else
+                    _forestColors = _forestMap.Colors;
+
+                _explored = explored;
             }
 
             private static IEnumerator GetVanillaMap(int resolution)
@@ -2422,7 +2587,7 @@ namespace NomapPrinter
                     case Heightmap.Biome.Mountain:    return _mountainColor;
                     case Heightmap.Biome.BlackForest: return _blackForestColor;
                     case Heightmap.Biome.Plains:      return _plainsColor;
-                    case Heightmap.Biome.AshLands:    return _ashlandsColor;
+                    case Heightmap.Biome.AshLands:    return _ashLandsColor;
                     case Heightmap.Biome.DeepNorth:   return _deepNorthColor;
                     case Heightmap.Biome.Ocean:       return _oceanColor;
                     case Heightmap.Biome.Mistlands:   return _mistlandsColor;
