@@ -19,6 +19,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using UnityEngine.Bindings;
 using UnityEngine.Scripting;
+using System.Runtime.InteropServices.ComTypes;
 
 
 namespace NomapPrinter
@@ -2091,7 +2092,7 @@ namespace NomapPrinter
                     int it = halfTextureSize * textureSize;
                     //int j = d;
                     int j0 = halfTextureSize;
-                    int j1 = textureSize;
+                    int j1 = textureSize - 1;
 
                     Func<int, int> getMapAltitude = (dj) =>
                     {
@@ -2111,16 +2112,18 @@ namespace NomapPrinter
 
                     while (j1 - j0 > 1)
                     {
-                        int j = (j1 - j0) / 2;
+                        int j = (j1 + j0) / 2;
                         int h = getMapAltitude(j);
 
                         if (h > abyssAltitude)
                         {
+                            Log($"[d] radius lookup: j0 = {j0}, j1 = {j1}, j = {j}, h = {h}, j0 -> j");
                             j0 = j;
                             //h0 = h;
                         }
                         else
                         {
+                            Log($"[d] radius lookup: j0 = {j0}, j1 = {j1}, j = {j}, h = {h}, j1 -> j");
                             j1 = j;
                             //h1 = h;
                         }
