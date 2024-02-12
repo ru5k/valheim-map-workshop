@@ -32,10 +32,10 @@ public class Mapmaker
     private readonly Color32[] _explored;
 
     private Color32[] _fogTexture;
+    private Color32[] _waterTexture;
 
     private readonly int       _contourInterval;
     private readonly int       _isobathInterval;
-    //private readonly bool      _drawIsobaths;
 
     //public Color32[] World;        // entire world map
     public Color32[] WorldMap;     // entire world map with contours
@@ -55,7 +55,6 @@ public class Mapmaker
         _explored        = explored;
         _contourInterval = contourInterval;
         _isobathInterval = isobathInterval;
-        //_drawIsobaths    = drawIsobaths;
 
         _mapPixelCount   = _mapSize * _mapSize;
 
@@ -96,6 +95,11 @@ public class Mapmaker
     public Color32[] FogTexture
     {
         set => _fogTexture = value;
+    }
+
+    public Color32[] WaterTexture
+    {
+        set => _waterTexture = value;
     }
 
 
@@ -193,6 +197,72 @@ public class Mapmaker
         ExploredMap = RenderFog(null, WorldMap, _explored, mask, maskClearColor, _mapSize, 128, 16);
 
         _trace.Append($"<- RenderTopographicalMapLegacy()\n");
+    }
+
+
+    public void RenderInkyMap()
+    {
+        Color32[] mask           = _biomes;      // TODO: use selector to render only explored map area
+        Color32   maskClearColor = _abyssColor;
+
+        _trace.Append($"-> RenderTopographicalMap()\n");
+
+        // _trace.Append($"--   FillWithColor()\n");
+        // Color32[] fogMask = FillWithColor(null, _biomes, _abyssColor, _explored, Color.clear);
+
+        if (WorldMap == null)
+        {
+            _trace.Append($"--   RenderWater()\n");
+            Color32[] water = RenderWater(null, _heights, mask, maskClearColor, _mapSize, 0, 0, 1.0f);
+
+            _trace.Append($"--   ReplaceColor(abyss -> white)\n");
+            Color32[] canvas = ReplaceColor(null, _biomes, _abyssColor, Color.white);
+
+            //_trace.Append($"--   RenderWater()\n");
+            //canvas = RenderWater(canvas, _heights, mask, maskClearColor, _mapSize, 4, 8, 1.0f);
+
+            _trace.Append("--   Blend(water)\n");
+            canvas = Blend(canvas, water, mask, maskClearColor);
+
+            if (_waterTexture != null)
+            {
+                _trace.Append("--   RenderTexture(waterTexture)\n");
+                canvas = RenderTexture(canvas, canvas, _waterTexture, water, Color.clear);
+            }
+
+            _trace.Append("--   RenderHeightLayer(-8, -100)\n");
+            canvas = RenderHeightLayer(canvas, _heights, -8, -100, Color.grey, (h) => (8 - h)*24, mask, maskClearColor, _mapSize, 0, 0, 1.0f);
+
+            _trace.Append($"--   DarkenLinear()\n");
+            canvas = DarkenLinear(canvas, canvas, 20, mask, maskClearColor);
+
+            _trace.Append($"--   DarkenRelative(forest)\n");
+            canvas = DarkenRelative(canvas, canvas, 0.85f, _forest, Color.clear);
+
+            if (_contourInterval > 0 || _isobathInterval > 0)
+            {
+                _trace.Append("--   RenderContours()\n");
+                canvas = RenderContours(canvas, _heights, _contourInterval, _isobathInterval, 128, mask, maskClearColor, _mapSize);
+            }
+
+            _trace.Append("--   WorldMap = canvas\n");
+            WorldMap = canvas;
+        }
+
+        if (_fogTexture == null)
+        {
+            _trace.Append("--   ExploredMap = RenderFog()\n");
+            ExploredMap = RenderFog(null, WorldMap, _explored, mask, maskClearColor, _mapSize, 128, 16);
+            // TODO: ExploredMap = RenderPerlinNoise(null, WorldMap, FogColor, fogMask, _abyssColor, 128, 16);
+        }
+        else
+        {
+            _trace.Append("--   ExploredMap = RenderFogTexture()\n");
+            ExploredMap = RenderFogTexture(null, WorldMap, _explored, mask, maskClearColor);
+            // ExploredMap = RenderTexture(null, WorldMap, _fogTexture, fogMask, _abyssColor);
+        }
+
+        _trace.Append($"<- RenderTopographicalMap()\n");
     }
 
 
@@ -425,7 +495,69 @@ public class Mapmaker
                 }
                 else
                 {
-                    c.rgba = OceanColor.rgba;
+                    c.rgba = _oceanColor.rgba;
+                }
+
+                c.a = (byte)(a > 255 ? 255 : a);
+
+                if (noBlending)
+                {
+                    pixel.rgba = c.rgba;
+                }
+                else
+                {
+                    BlendColor(ref pixel, pixel, c);
+                }
+            }
+        }
+
+        return canvas;
+    }
+
+
+    private Color32[] RenderHeightLayer(Color32[] canvas, Color32[] heights, int upperBound, int lowerBound, Color32 color, Func<int, int> alpha, Color32[] mask, Color32 maskClearColor, int size, int tightness, int noiseAmplitude, float noiseOffset = 0)
+    {
+        bool    noBlending = canvas == null;
+        Color32 c          = new Color32();
+
+        canvas = canvas ?? new Color32[heights.Length];
+
+        if (noiseOffset > 1)
+            noiseOffset = 1;
+        else if (noiseOffset < 0)
+            noiseOffset = 0;
+
+        for (int i = 0; i < heights.Length; ++i)
+        {
+            if (mask != null && mask[i].rgba == maskClearColor.rgba)
+                continue;
+
+            int h = heights[i].rgba;
+
+            if (h > upperBound || h < lowerBound)
+            {
+                // out of layer
+                if (noBlending)
+                    canvas[i] = Color.clear;
+            }
+            else
+            {
+                int a = alpha(h);
+
+                ref Color32 pixel = ref canvas[i];
+
+                if (tightness > 0 && noiseAmplitude > 0)
+                {
+                    // ReSharper disable once PossibleLossOfFraction
+                    float noise = Mathf.PerlinNoise((float)(i / size) / tightness, (float)(i % size) / tightness) - noiseOffset;
+                    byte  delta = (byte)(noiseAmplitude * noise);
+                    c.r = (byte)(color.r + delta);
+                    c.g = (byte)(color.g + delta);
+                    c.b = (byte)(color.b + delta);
+                }
+                else
+                {
+                    c.rgba = color.rgba;
                 }
 
                 c.a = (byte)(a > 255 ? 255 : a);
