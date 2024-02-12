@@ -1737,17 +1737,35 @@ namespace NomapPrinter
                 {
                     Mapmaker mapmaker = new Mapmaker(textureSize, m_mapTexture, _altitudes, _forestColors, _explored, _mapContourInterval.Value, _mapIsobathInterval.Value)
                     {
-                        WorldMap   = _worldMap.IsEmpty() ? null : _worldMap.Colors,
-                        FogTexture = _fogTexture.IsEmpty() ? null : _fogTexture.Colors,
-                        AbyssColor = _abyssColor,
-                        OceanColor = _oceanColor
+                        WorldMap     = _worldMap.IsEmpty() ? null : _worldMap.Colors,
+                        FogTexture   = _fogTexture.IsEmpty() ? null : _fogTexture.Colors,
+                        WaterTexture = _waterTexture.IsEmpty() ? null : _waterTexture.Colors,
+                        AbyssColor   = _abyssColor,
+                        OceanColor   = _oceanColor
                     };
 
                     // yet no choice =)
                     //yield return Mapmaker.RunAsCoroutine(() => mapmaker.RenderTopographicalMap());
                     var thread = new Thread(() =>
                     {
-                        mapmaker.RenderTopographicalMap();
+                        switch (_mapStyle.Value)
+                        {
+                            case MapStyle.Aerial:
+                                goto case MapStyle.Topo;
+                                break;
+                            case MapStyle.Topo:
+                                mapmaker.RenderTopographicalMap();
+                                break;
+                            case MapStyle.Chart:
+                                goto case MapStyle.Topo;
+                                break;
+                            case MapStyle.Ink:
+                                mapmaker.RenderInkyMap();
+                                break;
+                            default:
+                                goto case MapStyle.Topo;
+                        }
+
                     });
 
                     thread.Start();
@@ -1756,10 +1774,9 @@ namespace NomapPrinter
                         yield return null;
                     }
 
-                    string[] trace = Mapmaker.Trace().Split('\n');
                     int i = 0;
-                    foreach(var s in trace)
-                        Log($"[d] mapmaker trace #{++i,3}: {s}");
+                    foreach(var s in Mapmaker.Trace().Split('\n'))
+                        if (s.Length > 0) Log($"[d] mapmaker trace #{++i,3}: {s}");
 
                     map      = mapmaker.ExploredMap;
                     clearMap = mapmaker.WorldMap;
@@ -2018,10 +2035,10 @@ namespace NomapPrinter
             ///   m_mapData
             ///
             /// TODO:
-            ///   combine m_exploration and m_mapData in single Color32[] array like it is made for others and self explored areas
-            ///   combine m_mapTexture, m_forestTexture and m_heightmap (we can go deeper and even combine them with m_exploration and m_mapData)
-            ///   calculate abyss area without scanning the whole map (e.g. binary lookup for the worlds radius)
-            ///   support multithreading: we can split map for horizontal chunks
+            ///   - combine m_exploration and m_mapData in single Color32[] array like it is made for others and self explored areas
+            ///   - combine m_mapTexture, m_forestTexture and m_heightmap (we can go deeper and even combine them with m_exploration and m_mapData)
+            ///   + calculate abyss area without scanning the whole map (e.g. binary lookup for the worlds radius)
+            ///   - support multithreading: we can split map for horizontal chunks
             ///
             private static IEnumerator GetMapData()
             {
