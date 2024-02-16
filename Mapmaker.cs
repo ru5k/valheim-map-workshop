@@ -230,8 +230,15 @@ public class Mapmaker
                 canvas = RenderTexture(canvas, canvas, _waterTexture, water, Color.clear);
             }
 
+            Color32 deepColor = new Color32(
+                (byte)(_oceanColor.r < 196 ? _oceanColor.r + 60 : 255),
+                (byte)(_oceanColor.g < 196 ? _oceanColor.g + 60 : 255),
+                (byte)(_oceanColor.b < 196 ? _oceanColor.b + 60 : 255),
+                255
+            );
+
             _trace.Append("--   RenderHeightLayer(-8, -100)\n");
-            canvas = RenderHeightLayer(canvas, _heights, -8, -100, Color.grey, (h) => (8 - h)*24, mask, maskClearColor, _mapSize, 0, 0, 1.0f);
+            canvas = RenderHeightLayer(canvas, _heights, -8, -100, deepColor, (h) => (8 - h)*8, mask, maskClearColor, _mapSize, 0, 0, 1.0f);
 
             _trace.Append($"--   DarkenLinear()\n");
             canvas = DarkenLinear(canvas, canvas, 20, mask, maskClearColor);
@@ -560,7 +567,7 @@ public class Mapmaker
                     c.rgba = color.rgba;
                 }
 
-                c.a = (byte)(a > 255 ? 255 : a);
+                c.a = (byte)(a > 255 ? 255 : (a < 0 ? 0 : a));
 
                 if (noBlending)
                 {
@@ -599,6 +606,7 @@ public class Mapmaker
 
             if (tightness > 0 && damping > 0)
             {
+                // ReSharper disable once PossibleLossOfFraction
                 float noise = Mathf.PerlinNoise((float)(i / size) / tightness, (float)(i % size) / tightness) - 0.5f;
                 byte  delta = (byte)(255 * noise / damping);
                 pixel.r = (byte)(FogColor.r + delta);
