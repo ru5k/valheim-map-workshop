@@ -1650,7 +1650,8 @@ namespace NomapPrinter
             }
 
 
-            // Run() is an experimental version of Go()
+            /// function Run() is an experimental version of Go()
+            ///
             public IEnumerator Run()
             {
                 working = true;
@@ -2035,10 +2036,10 @@ namespace NomapPrinter
             ///   m_mapData
             ///
             /// TODO:
-            ///   - combine m_exploration and m_mapData in single Color32[] array like it is made for others and self explored areas
-            ///   - combine m_mapTexture, m_forestTexture and m_heightmap (we can go deeper and even combine them with m_exploration and m_mapData)
             ///   + calculate abyss area without scanning the whole map (e.g. binary lookup for the worlds radius)
             ///   - support multithreading: we can split map for horizontal chunks
+            ///   - combine m_exploration and m_mapData in single Color32[] array like it is made for others and self explored areas
+            ///   - combine m_mapTexture, m_forestTexture and m_heightmap (we can go deeper and even combine them with m_exploration and m_mapData)
             ///
             private static IEnumerator GetMapData()
             {
@@ -2105,44 +2106,36 @@ namespace NomapPrinter
                 //*/
                 if (_mapUseWorldRadius.Value)
                 {
-                    //int d = halfTextureSize / 2;
                     int it = halfTextureSize * textureSize;
-                    //int j = d;
                     int j0 = halfTextureSize;
                     int j1 = textureSize - 1;
 
-                    Func<int, int> getMapAltitude = (dj) =>
+                    int GetMapAltitude(int dj)
                     {
                         const float wy = 0;
 
-                        float wx = (dj - halfTextureSize) * pixelSize + halfPixelSize;  // = halfPixelSize;
+                        float wx = (dj - halfTextureSize) * pixelSize + halfPixelSize; // = halfPixelSize;
                         int   n  = it + dj;
 
-                        Heightmap.Biome biome    = getBiome(n, wx, wy);            // WorldGenerator.instance.GetBiome(wx, wy);
-                        int             altitude = getAltitude(n, wx, wy, biome);  //
+                        Heightmap.Biome biome = getBiome(n, wx, wy); // WorldGenerator.instance.GetBiome(wx, wy);
 
-                        return altitude;
-                    };
-
-                    //int h0 = getMapAltitude(j0);
-                    //int h1 = getMapAltitude(j1);
+                        return getAltitude(n, wx, wy, biome);
+                    }
 
                     while (j1 - j0 > 1)
                     {
                         int j = (j1 + j0) / 2;
-                        int h = getMapAltitude(j);
+                        int h = GetMapAltitude(j);
 
                         if (h > abyssAltitude)
                         {
                             Log($"[d] radius lookup: j0 = {j0}, j1 = {j1}, j = {j}, h = {h}, j0 -> j");
                             j0 = j;
-                            //h0 = h;
                         }
                         else
                         {
                             Log($"[d] radius lookup: j0 = {j0}, j1 = {j1}, j = {j}, h = {h}, j1 -> j");
                             j1 = j;
-                            //h1 = h;
                         }
                     }
 
@@ -2153,7 +2146,7 @@ namespace NomapPrinter
 
                 var internalThread = new Thread(() =>
                 {
-                    if (_mapFetchOnlyExplored.Value)
+                    if (_mapFetchOnlyExplored.Value && mapData != null)
                     {
                         for (int i = 0; i < textureSize; ++i)
                         {
@@ -2206,21 +2199,25 @@ namespace NomapPrinter
                     {
                         for (int i = 0, ti = 0; i < textureSize; ++i, ti += textureSize)
                         {
-                            float wy = (i - halfTextureSize) * pixelSize + halfPixelSize;
+                            int   wi = i - halfTextureSize;
+                            float wy = wi * pixelSize + halfPixelSize;
 
                             for (int j = 0, n = ti; j < textureSize; ++j, ++n)
                             {
                                 if (mapData != null && !mapData[n])
                                     continue;
 
-                                float wx = (j - halfTextureSize) * pixelSize + halfPixelSize;
+                                int   wj = j - halfTextureSize;
+                                float wx = wj * pixelSize + halfPixelSize;
 
 
                                 // All is bad: the 'abyss' does not stand out among biomes - you always need a height
                                 Heightmap.Biome biome    = Heightmap.Biome.None; // = getBiome(n, wx, wy);
                                 int             altitude = abyssAltitude - 1;    // = getAltitude(n, wx, wy, biome);
 
-                                if (radius2 <= 0 || radius2 >= (j - halfTextureSize)*(j - halfTextureSize) + (i - halfTextureSize)*(i - halfTextureSize))
+                                if (   radius2 <= 0
+                                    || radius2 >= wj*wj + wi*wi
+                                )
                                 {
                                     biome    = getBiome(n, wx, wy);
                                     altitude = getAltitude(n, wx, wy, biome);
