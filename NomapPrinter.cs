@@ -68,7 +68,7 @@ namespace NomapPrinter
         private static ConfigEntry<int>      _mapFetchersCount;
         private static ConfigEntry<bool>     _mapUseWorldRadius;
         private static ConfigEntry<bool>     _mapFetchOnlyExplored;
-        private static ConfigEntry<Color32>  _mapOceanColor;
+        private static ConfigEntry<Color>    _mapOceanColor;
 
         private static ConfigEntry<int> heightmapFactor;
         private static ConfigEntry<int> graduationLinesDensity;
@@ -557,7 +557,14 @@ namespace NomapPrinter
             _mapFetchersCount     = configLocal("Mapmaker.x", "FetchersCount",     1,                "Map data fetchers count.");
             _mapUseWorldRadius    = configLocal("Mapmaker.x", "UseWorldRadius",    false,            "Calculate and use world radius to narrow fetching of biomes and heights.");
             _mapFetchOnlyExplored = configLocal("Mapmaker.x", "FetchOnlyExplored", true,             "Fetch map data only for explored area.");
-            _mapOceanColor        = configLocal("Mapmaker.x", "OceanColor",        (Color32)Color.white, "Ocean color.");
+            // [Error: Unity Log] ArgumentException: Type UnityEngine.Color32 is not supported by the config system.
+            // Supported types:
+            //   String, Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Single, Double, Decimal, Enum,
+            //
+            //   Color,  // [!]
+            //
+            //   Vector2, Vector3, Vector4, Quaternion, Rect, KeyboardShortcut
+            _mapOceanColor        = configLocal("Mapmaker.x", "OceanColor",        Color.white,      "Ocean color.");
 
             messageStart = config("Messages", "Drawing begin", "Remembering travels...", "Center message when drawing is started. [Not Synced with Server]", false);
             messageSaving = config("Messages", "Drawing end", "Drawing map...", "Center message when saving file is started. [Not Synced with Server]", false);
@@ -2282,7 +2289,7 @@ namespace NomapPrinter
                 if (textureSize - chunkEnd < chunkSize)
                     chunkEnd = textureSize;
 
-                for (int n = 0; chunkEnd <= textureSize; ++n)
+                for (int n = 0; chunkEnd <= textureSize && n < _mapFetchersCount.Value; ++n)
                 {
                     int iBegin = chunkBegin;
                     int iEnd   = chunkEnd;
@@ -2292,7 +2299,7 @@ namespace NomapPrinter
 
                     chunkBegin = chunkEnd;
                     chunkEnd   = chunkBegin + chunkSize;
-                    if (textureSize - chunkEnd < chunkSize)
+                    if (chunkEnd < textureSize && textureSize - chunkEnd < chunkSize)
                         chunkEnd = textureSize;
                 }
 
