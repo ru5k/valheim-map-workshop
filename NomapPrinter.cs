@@ -12,7 +12,7 @@ using System.Threading;
 using UnityEngine;
 using UnityEngine.UI;
 using ServerSync;
-using UnityEngine.EventSystems;
+//using UnityEngine.EventSystems;
 
 
 namespace NomapPrinter
@@ -2242,27 +2242,69 @@ namespace NomapPrinter
                     }
                 };  // void GetMapChunkData(int jBegin, int jEnd)
 
+                int[]   slicesOffset = new int[] {0, 1, 3, 6, 10, 15, 21, 28};  // [8]
+                float[] slices       = new float[] {
+                    100.00f,
+                     50.00f, 50.00f,
+                     36.75f, 26.49f, 36.75f,
+                     29.80f, 20.20f, 20.20f, 29.80f,
+                     25.41f, 16.71f, 15.77f, 16.71f, 25.41f,
+                     22.34f, 14.42f, 13.25f, 13.25f, 14.42f, 22.34f,
+                     20.05f, 12.78f, 11.55f, 11.24f, 11.55f, 12.78f, 20.05f,
+                     18.26f, 11.54f, 10.32f,  9.88f,  9.88f, 10.32f, 11.54f, 18.26f
+                };
+
                 Thread[] fetchers   = new Thread[_mapFetchersCount.Value];
-                int      chunkSize  = textureSize / _mapFetchersCount.Value;
 
-                int      chunkBegin = 0;
-                int      chunkEnd   = chunkSize;
+                if (_radius <= 0)
+                {
+                    int chunkSize  = textureSize / _mapFetchersCount.Value;
 
-                if (textureSize - chunkEnd < chunkSize)
+                    int chunkBegin = 0;
+                    int chunkEnd   = chunkSize;
+
+                    if (textureSize - chunkEnd < chunkSize)
+                        chunkEnd = textureSize;
+
+                    for (int n = 0; chunkEnd <= textureSize && n < _mapFetchersCount.Value; ++n)
+                    {
+                        int iBegin = chunkBegin;
+                        int iEnd   = chunkEnd;
+
+                            fetchers[n] = new Thread(() => getMapChunkData(iBegin, iEnd));
+                            fetchers[n].Start();
+
+                        chunkBegin = chunkEnd;
+                        chunkEnd   = chunkBegin + chunkSize;
+                        if (chunkEnd < textureSize && textureSize - chunkEnd < chunkSize)
+                            chunkEnd = textureSize;
+                    }
+                }
+                else
+                {
+                    int offset     = slicesOffset[_mapFetchersCount.Value - 1];
+                    int diameter   = _radius + _radius;
+                    int chunkBegin = 0;
+                    int chunkEnd   = halfTextureSize - _radius + (int)(diameter * slices[offset] / 100);
+
+                    for (int n = 0; n < _mapFetchersCount.Value - 1; ++n)
+                    {
+                        int iBegin = chunkBegin;
+                        int iEnd   = chunkEnd;
+
+                        fetchers[n] = new Thread(() => getMapChunkData(iBegin, iEnd));
+                        fetchers[n].Start();
+
+                        int h = (int)(diameter * slices[offset + n + 1] / 100);
+
+                        chunkBegin = chunkEnd;
+                        chunkEnd   = chunkBegin + h;
+                    }
+
                     chunkEnd = textureSize;
 
-                for (int n = 0; chunkEnd <= textureSize && n < _mapFetchersCount.Value; ++n)
-                {
-                    int iBegin = chunkBegin;
-                    int iEnd   = chunkEnd;
-
-                    fetchers[n] = new Thread(() => getMapChunkData(iBegin, iEnd));
-                    fetchers[n].Start();
-
-                    chunkBegin = chunkEnd;
-                    chunkEnd   = chunkBegin + chunkSize;
-                    if (chunkEnd < textureSize && textureSize - chunkEnd < chunkSize)
-                        chunkEnd = textureSize;
+                    fetchers[_mapFetchersCount.Value - 1] = new Thread(() => getMapChunkData(chunkBegin, chunkEnd));
+                    fetchers[_mapFetchersCount.Value - 1].Start();
                 }
 
                 for (int n = 0; n < _mapFetchersCount.Value; ++n)
