@@ -561,7 +561,7 @@ namespace NomapPrinter
             // Supported types:
             //   String, Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Single, Double, Decimal, Enum,
             //
-            //   Color,  // [!]
+            //   Color,  // [!] => 4-byte hex. e.g. FFFFFFFF for white
             //
             //   Vector2, Vector3, Vector4, Quaternion, Rect, KeyboardShortcut
             _mapOceanColor        = configLocal("Mapmaker.x", "OceanColor",        Color.white,      "Ocean color.");
@@ -1560,11 +1560,20 @@ namespace NomapPrinter
 
                 if (mapType.Value != MapType.Vanilla)
                 {
+                    Stopwatch stopwatch = new Stopwatch();
+
                     ShowMessage(messageStart.Value);
+
+                    stopwatch.Start();
 
                     yield return PrepareTerrainData();
 
+                    stopwatch.Stop();
+                    Log($"[d] fetched map data in {stopwatch.ElapsedMilliseconds/1000} sec");
+
                     ShowMessage(messageSaving.Value);
+
+                    stopwatch.Restart();
 
                     MapImageGeneration.Initialize(m_mapTexture, m_forestTexture, m_heightmap, m_exploration, textureSize, m_mapData);
 
@@ -1587,6 +1596,9 @@ namespace NomapPrinter
                         default:
                             goto case MapType.Chart;
                     }
+
+                    stopwatch.Stop();
+                    Log($"[d] rendered map in {stopwatch.ElapsedMilliseconds/1000} sec");
 
                     ApplyMapTexture(mapType.Value, imageGen.output);
                 }
@@ -1661,6 +1673,9 @@ namespace NomapPrinter
 
                 Stopwatch stopwatch = new Stopwatch();
 
+                //WorldTerrain terrain = new WorldTerrain((int)_mapScale.Value, _mapFetchersCount.Value, _mapUseWorldRadius.Value);
+                //yield return terrain.Fetch();
+
                 ShowMessage(messageStart.Value);
 
                 stopwatch.Start();
@@ -1668,7 +1683,7 @@ namespace NomapPrinter
                 yield return GetMapData();
 
                 stopwatch.Stop();
-                Log($"[d] fetched map data in {stopwatch.ElapsedMilliseconds/1000} sec.: min altitude is {_minAltitude}, max altitude is {_maxAltitude}, radius is {_radius}");
+                Log($"[d] fetched map data in {stopwatch.ElapsedMilliseconds/1000} sec: min altitude is {_minAltitude}, max altitude is {_maxAltitude}, radius is {_radius}");
 
                 ShowMessage(messageSaving.Value);
 
@@ -1711,26 +1726,19 @@ namespace NomapPrinter
                 {
                     Mapmaker mapmaker = new Mapmaker(textureSize, _biomesMap.Colors, _altitudes, _forestMap.Colors, _explored, _mapContourInterval.Value, _mapIsobathInterval.Value)
                     {
-                        WorldMap   = _worldMap.IsEmpty() ? null : _worldMap.Colors,
-                        AbyssColor = _abyssColor
+                        WorldMap     = _worldMap.IsEmpty() ? null : _worldMap.Colors,
+                        FogTexture   = _fogTexture.IsEmpty() ? null : _fogTexture.Colors,
+                        WaterTexture = _waterTexture.IsEmpty() ? null : _waterTexture.Colors,
+                        AbyssColor   = _abyssColor,
+                        OceanColor   = _oceanColor
                     };
 
                     // yet no choice =)
                     yield return Mapmaker.RunAsCoroutine(() => mapmaker.RenderTopographicalMapLegacy());
-                    //var thread = new Thread(() =>
-                    //{
-                    //    mapmaker.RenderTopographicalMapLegacy();
-                    //});
-                    //
-                    //thread.Start();
-                    //while (thread.IsAlive)
-                    //{
-                    //    yield return null;
-                    //}
 
                     int i = 0;
                     foreach(var s in Mapmaker.Trace().Split('\n'))
-                        Log($"[d] mapmaker trace line {++i,3}: {s}");
+                        if (s.Length > 0) Log($"[d] mapmaker trace line {++i,3}: {s}");
 
                     map      = mapmaker.ExploredMap;
                     clearMap = mapmaker.WorldMap;
@@ -1746,8 +1754,6 @@ namespace NomapPrinter
                         OceanColor   = _oceanColor
                     };
 
-                    // yet no choice =)
-                    //yield return Mapmaker.RunAsCoroutine(() => mapmaker.RenderTopographicalMap());
                     var thread = new Thread(() =>
                     {
                         switch (_mapStyle.Value)
@@ -1785,8 +1791,7 @@ namespace NomapPrinter
                 }
 
                 stopwatch.Stop();
-
-                Log($"[d] rendered map in {stopwatch.ElapsedMilliseconds/1000} sec.");
+                Log($"[d] rendered map in {stopwatch.ElapsedMilliseconds/1000} sec");
 
                 if (saveMapToFile.Value && !_mapFetchOnlyExplored.Value)
                 {
@@ -2323,7 +2328,7 @@ namespace NomapPrinter
                     int offset     = slicesOffset[_mapFetchersCount.Value - 1];
                     int diameter   = _radius + _radius;
                     int chunkBegin = 0;
-                    int chunkEnd   = halfTextureSize - _radius + (int)(diameter * slices[offset] / 100);
+                    int chunkEnd   = halfTextureSize - _radius + (int)(diameter * slices[offset] / 100f);
 
                     for (int n = 0; n < _mapFetchersCount.Value - 1; ++n)
                     {
@@ -2333,7 +2338,7 @@ namespace NomapPrinter
                         fetchers[n] = new Thread(() => getMapChunkData(iBegin, iEnd));
                         fetchers[n].Start();
 
-                        int h = (int)(diameter * slices[offset + n + 1] / 100);
+                        int h = (int)(diameter * slices[offset + n + 1] / 100f);
 
                         chunkBegin = chunkEnd;
                         chunkEnd   = chunkBegin + h;
@@ -2392,6 +2397,9 @@ namespace NomapPrinter
 
             private static IEnumerator GetVanillaMap(int resolution)
             {
+                Stopwatch stopwatch = new Stopwatch();
+                stopwatch.Start();
+
                 bool wasOpen = Minimap.instance.m_largeRoot.activeSelf;
                 if (!wasOpen)
                 {
@@ -2482,6 +2490,9 @@ namespace NomapPrinter
                 // ?
                 mapTexture.Reinitialize(resolution, resolution, TextureFormat.RGB24, false);
                 mapTexture.ReadPixels(new Rect(0, 0, resolution, resolution), 0, 0);
+
+                stopwatch.Stop();
+                Log($"[d] rendered original map in {stopwatch.ElapsedMilliseconds/1000} sec");
 
                 if (showPins.Value)
                 {
@@ -3063,26 +3074,158 @@ namespace NomapPrinter
 
         private interface IStorage
         {
-            void   Put(string key, byte[] data);
-            byte[] Get(string key);
-            void   Delete(string key);
-            bool   Exists(string key);
+            void   Put(string[] key, byte[] data, string label);
+            byte[] Get(string[] key, string label);
+            void   Delete(string[] key);
+            bool   Exists(string[] key);
             void   Clear();
+        }
+
+
+        private class GameStorage : IStorage
+        {
+            public void Put(string[] key, byte[] data, string label)
+            {
+                //
+            }
+
+            public byte[] Get(string[] key, string label)
+            {
+                return null;
+            }
+
+            public void Delete(string[] key)
+            {
+                //
+            }
+
+            public bool Exists(string[] key)
+            {
+                return false;
+            }
+
+            public void Clear()
+            {
+                //
+            }
+        }
+
+
+        private class FileStorage: IStorage
+        {
+            private readonly string _directory;
+            private readonly string _prefix;
+
+            public FileStorage(string directory, string prefix)
+            {
+                _directory = directory;  // string fileDir = GetMapFileDir();
+                _prefix    = prefix;
+            }
+
+            private string GetFileName(IEnumerable<string> tags = null)
+            {
+                var allTags = tags != null
+                    ? tags.Prepend(_prefix).ToList()
+                    : new List<string>{_prefix};
+                return $"{string.Join("-", allTags)}.png";
+            }
+
+            private static byte[] ReadFromFile(string filename)
+            {
+                if (!File.Exists(filename))
+                {
+                    Log($"[i] failed to find file \"{filename}\"");
+                }
+                else
+                {
+                    try
+                    {
+                        Log($"[i] reading data from \"{filename}\"");
+                        byte[] bytes = File.ReadAllBytes(filename);
+                        Log($"[d] read data from \"{filename}\"");
+
+                        return bytes;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"[e] failed to read data from \"{filename}\": {ex}");
+                    }
+                }
+
+                return null;
+            }
+
+            public void Put(string[] key, byte[] data, string label)
+            {
+                Directory.CreateDirectory(_directory);
+
+                string fileName = Path.Combine(_directory, GetFileName(key));
+                Log($"[i] writing {label} to file \"{fileName}\"");
+                File.WriteAllBytes(fileName, data);
+            }
+
+            public byte[] Get(string[] key, string label)
+            {
+                string fileName = Path.Combine(_directory, GetFileName(key));
+                Log($"[i] reading {label} from file \"{fileName}\"");
+                return ReadFromFile(fileName);
+            }
+
+            public void Delete(string[] key)
+            {
+                string fileName = Path.Combine(_directory, GetFileName(key));
+                try
+                {
+                    if (Directory.Exists(_directory) && File.Exists(fileName))
+                        File.Delete(fileName);
+                }
+                catch (Exception e)
+                {
+                    // ArgumentException – path is a zero-length string, contains only white space, or contains one or more invalid characters as defined by InvalidPathChars.
+                    // ArgumentNullException – path is null.
+                    // DirectoryNotFoundException – The specified path is invalid (for example, it is on an unmapped drive).
+                    // IOException – The specified file is in use. -or-There is an open handle on the file, and the operating system is Windows XP or earlier. This open handle can result from enumerating directories and files. For more information, see How to: Enumerate Directories and Files.
+                    // NotSupportedException – path is in an invalid format.
+                    // PathTooLongException – The specified path, file name, or both exceed the system-defined maximum length. For example, on Windows-based platforms, paths must be less than 248 characters, and file names must be less than 260 characters.
+                    // UnauthorizedAccessException
+                    Log($"[e] failed to delete file \"{fileName}\" - {e.Message}");
+                }
+            }
+
+            public bool Exists(string[] key)
+            {
+                string fileName = Path.Combine(_directory, GetFileName(key));
+                return File.Exists(fileName);
+            }
+
+            public void Clear()
+            {
+                if (!Directory.Exists(_directory))
+                    return;
+
+                var dir = new DirectoryInfo(_directory);
+                foreach (var file in dir.EnumerateFiles($"{_prefix}*.png"))
+                {
+                    file.Delete();
+                }
+            }
         }
 
 
         private sealed class ImageContext
         {
-            private SquareImage _image;
-            private string[]    _tags;
-            private IStorage    _storage;
+            private readonly SquareImage _image;
+            private readonly string[]    _tags;
+            private readonly string      _label;
+            private readonly IStorage    _storage;
 
-            private bool        _isSaved = false;
+            private bool                 _isSaved = false;
 
-            public ImageContext(SquareImage image, string[] tags, IStorage storage)
+            public ImageContext(SquareImage image, string[] tags, string label, IStorage storage)
             {
                 _image   = image;
                 _tags    = tags;
+                _label   = label;
                 _storage = storage;
             }
 
@@ -3090,11 +3233,23 @@ namespace NomapPrinter
 
             public void Save()
             {
+                if (_isSaved || _image.IsEmpty())
+                    return;
 
+                _storage.Put(_tags, _image.EncodeAsPNG(), _label);
+                _isSaved = true;
             }
 
             public void Load()
             {
+                if (!_isSaved || _image.IsEmpty())
+                {
+                    //Log($"[d] forest map is empty - trying to load it from file");
+                    _image.DecodeAsPNG(_storage.Get(_tags, _label));
+                    _isSaved = !_image.IsEmpty();
+                    if (!_image.IsEmpty())
+                        Log($"[i] loaded forest map from file");
+                }
 
             }
         }
