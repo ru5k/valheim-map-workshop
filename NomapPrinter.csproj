@@ -97,6 +97,8 @@
   <ItemGroup>
     <Compile Include="MapImageGeneration.cs" />
     <Compile Include="Mapmaker.cs" />
+    <Compile Include="WorldExploration.cs" />
+    <Compile Include="WorldTerrain.cs" />
     <Compile Include="NomapPrinter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
