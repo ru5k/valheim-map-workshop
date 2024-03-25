@@ -205,7 +205,7 @@ public class Mapmaker
         Color32[] mask           = _biomes;      // TODO: use selector to render only explored map area
         Color32   maskClearColor = _abyssColor;
 
-        _trace.Append($"-> RenderTopographicalMap()\n");
+        _trace.Append($"-> RenderInkyMap()\n");
 
         // _trace.Append($"--   FillWithColor()\n");
         // Color32[] fogMask = FillWithColor(null, _biomes, _abyssColor, _explored, Color.clear);
@@ -269,7 +269,7 @@ public class Mapmaker
             // ExploredMap = RenderTexture(null, WorldMap, _fogTexture, fogMask, _abyssColor);
         }
 
-        _trace.Append($"<- RenderTopographicalMap()\n");
+        _trace.Append($"<- RenderInkyMap()\n");
     }
 
 
