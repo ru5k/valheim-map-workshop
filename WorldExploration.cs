@@ -7,36 +7,89 @@ namespace NomapPrinter
 {
     public class WorldExploration
     {
-        private readonly int  _mapScale;
-        private readonly bool _showSharedMap;
+        private readonly int     _mapScale;
+        private readonly bool    _showSharedMap;
+
+        private readonly Color32 _exploredNew = new Color32(1, 0, 0, 1);
+        private readonly Color32 _exploredOld = new Color32(1, 0, 1, 1);
+        private readonly Color32 _extendedNew = new Color32(0, 1, 0, 0);
+        private readonly Color32 _extendedOld = new Color32(0, 1, 1, 0);
 
         private int       _textureSize;
         private Color32[] _explored;
+
+        private Texture2D _fogTexture;
+
+        private int       _cachedX = -1;
+        private int       _cachedY = -1;
+        private bool      _cachedIsExplored;
+
+        // TODO:
+        //   add out int[2 * _textureSize] - left and right bounds for x (::= j)
+        //   add out int[2] - top and bottom bounds for y (::= i)
+        //   => these can narrow scanned region when fetching heights more than world radius
+        //
+        //   we can also narrow fetching of exploration data by providing a precalculated world radius (not a big speed boost though)
+        //
+        //   so, a strategy:
+        //     load old heights and old exploration
+        //     -> get world radius
+        //       -> get exploration region and bounds taking into account the radius
+        //         -> fetch data using bounds and 'new pixels' flags to add them to heights
+        //           -> save new heights and new exploration
+        //
+        //   in case of fetching all map heights we just mark all unexplored pixels as extended (unexplored but needed to be fetched)
 
         public WorldExploration(int mapScale, bool showSharedMap, Color32[] explored = null)
         {
             _mapScale      = mapScale;
             _showSharedMap = showSharedMap;
             _explored      = explored;
+            if (_explored != null)
+                _textureSize = (int)Math.Sqrt(_explored.Length);
         }
 
-        public Color32[] Explored
+        public Color32[] ExploredColors
         {
             get => _explored;
             private set {}
         }
 
+        public int TextureSize
+        {
+            get => _textureSize;
+            private set {}
+        }
+
         private bool IsExplored(int x, int y)
         {
-            Color explorationPos = Minimap.instance.m_fogTexture.GetPixel(x / _mapScale, y / _mapScale);
-            return explorationPos.r == 0f || _showSharedMap && explorationPos.g == 0f;
+            x /= _mapScale; 
+            y /= _mapScale;
+
+            if (x == _cachedX && y == _cachedY)
+                return _cachedIsExplored;
+
+            _cachedX = x;
+            _cachedY = y;
+            Color pixel = _fogTexture.GetPixel(x, y);
+            _cachedIsExplored = pixel.r == 0f || _showSharedMap && pixel.g == 0f;
+            return _cachedIsExplored;
         }
 
         private IEnumerator InternalFetch()
         {
-            _textureSize = _mapScale * Minimap.instance.m_textureSize;
+            int textureSize = Minimap.instance.m_textureSize * _mapScale;
+            if (textureSize != _textureSize)
+            {
+                _textureSize = textureSize;
+                _explored    = null;
+            }
+
+            _fogTexture  = Minimap.instance.m_fogTexture;
 
             int arraySize = _textureSize * _textureSize;
+            
+            bool[] isNew = new bool[arraySize];
 
             if (_explored == null)
                 _explored = new Color32[arraySize];
@@ -52,22 +105,21 @@ namespace NomapPrinter
                         int pos = it + j;
 
                         bool isExplored = IsExplored(j, i);
-
                         if (!isExplored)
-                            continue;
+                            continue;     // => r = g = b = a = 0
 
-                        ref Color32 pixel = ref _explored[pos];
+                        ref Color32 pixel    = ref _explored[pos];
+                        ref bool    isNewOne = ref isNew[pos];
 
-                        if (pixel.r > 0 || pixel.g > 0)
-                        {
-                            pixel.r = 0;
-                            pixel.g = byte.MaxValue;
-                        }
+                        // (.r != 0 || .g != 0) && .b == 0  => to fetch
+                        // .a == 1                          => explored
+
+                        if (pixel.r == 0 && pixel.g == 0)
+                            pixel.rgba = _exploredNew.rgba;
                         else
-                        {
-                            pixel.r = byte.MaxValue;
-                            pixel.g = 0;
-                        }
+                            pixel.rgba = _exploredOld.rgba;
+
+                        isNewOne = true;
 
                         // Get map data in a small radius
                         int iBegin = i - 1 >= 0 ? i - 1 : 0;
@@ -78,18 +130,28 @@ namespace NomapPrinter
 
                             int jBegin = j - 1 >= 0 ? j - 1 : 0;
                             int jEnd   = j + 1 < _textureSize ? j + 2 : _textureSize;
+
                             for (int dj = jBegin; dj < jEnd; ++dj)
                             {
-                                pixel = ref _explored[dit + dj];
-                                if (pixel.b > 0 || pixel.a > 0)
+                                int rpos = it + j;
+
+                                pixel    = ref _explored[rpos];
+                                isNewOne = ref isNew[rpos];
+
+                                if (rpos != pos && pixel.r == 0)
                                 {
-                                    pixel.b = 0;
-                                    pixel.a = byte.MaxValue;
-                                }
-                                else
-                                {
-                                    pixel.b = byte.MaxValue;
-                                    pixel.a = 0;
+                                    if (pixel.g == 0)
+                                    {
+                                        pixel.rgba = _extendedNew.rgba;
+                                        isNewOne   = true;
+                                    }
+                                    else
+                                    {
+                                        if (!isNewOne)
+                                        {
+                                            pixel.rgba = _extendedOld.rgba;
+                                        }
+                                    }
                                 }
                             }
                         }
