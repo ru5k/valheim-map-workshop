@@ -13,7 +13,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using ServerSync;
 
-namespace NomapPrinter
+namespace MapWorkshop
 {
     public class WorldTerrain
     {

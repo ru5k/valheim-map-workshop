@@ -15,18 +15,20 @@ using ServerSync;
 //using UnityEngine.EventSystems;
 
 
-namespace NomapPrinter
+namespace MapWorkshop
 {
-    [BepInPlugin(pluginID, pluginName, pluginVersion)]
-    public class NomapPrinter : BaseUnityPlugin
+    [BepInPlugin(PluginID, PluginName, PluginVersion)]
+    public class MapWorkshop : BaseUnityPlugin
     {
-        const string pluginID = "shudnal.NomapPrinter";
-        const string pluginName = "Nomap Printer";
-        const string pluginVersion = "1.1.8";
+        private const    string      PluginID      = "map-workshop";
+        private const    string      PluginName    = "Map Workshop";
+        private const    string      PluginVersion = "1.1.8";
 
-        private readonly Harmony harmony = new Harmony(pluginID);
+        private static   MapWorkshop instance;
 
-        internal static readonly ConfigSync configSync = new ConfigSync(pluginID) { DisplayName = pluginName, CurrentVersion = pluginVersion, MinimumRequiredVersion = pluginVersion };
+        private readonly Harmony     harmony = new Harmony(PluginID);
+
+        internal static readonly ConfigSync configSync = new ConfigSync(PluginID) { DisplayName = PluginName, CurrentVersion = PluginVersion, MinimumRequiredVersion = PluginVersion };
 
         //
         // -- configuration parameters
@@ -124,9 +126,6 @@ namespace NomapPrinter
 
         // ! internal map image renderer - async data provider and decorator for MapImageGeneration class
         MapGeneration maker;
-
-        // ! this object (singleton like)
-        private static NomapPrinter instance;
 
         // plugin save data path
         private static string localPath;
@@ -721,7 +720,7 @@ namespace NomapPrinter
 
         private static string LocalFileName(Player player)
         {
-            return Path.Combine(localPath, localFolder.Value, $"shudnal.NomapPrinter.{player.GetPlayerName()}.{game_world.m_name}.png");
+            return Path.Combine(localPath, localFolder.Value, $"shudnal.MapWorkshop.{player.GetPlayerName()}.{game_world.m_name}.png");
         }
 
         private static bool LoadMapFromLocalFile(Player player)
