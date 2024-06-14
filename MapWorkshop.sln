@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.32126.317
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NomapPrinter", "NomapPrinter.csproj", "{BA601320-0ECE-4B27-B2A4-A1FE1BA817B3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MapWorkshop", "MapWorkshop.csproj", "{BA601320-0ECE-4B27-B2A4-A1FE1BA817B3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

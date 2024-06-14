@@ -367,5 +367,5 @@ FodyWeavers.xsd
 *.zip
 *.7z
 
-/NomapPrinter/package/NomapPrinter.dll
-/package/thunderstore/NomapPrinter/NomapPrinter.dll
+_bin/
+_build/

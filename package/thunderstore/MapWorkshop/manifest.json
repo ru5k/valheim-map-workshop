@@ -1,0 +1,7 @@
+{
+    "name": "MapWorkshop",
+    "version_number": "1.1.8",
+    "website_url": "https://github.com/ru5k/valheim-map-workshop",
+    "description": "Writing to the Cartography Table will render a custom map which can be viewed in and outside the game.",
+    "dependencies": [ "denikson-BepInExPack_Valheim-5.4.2202" ]
+}
